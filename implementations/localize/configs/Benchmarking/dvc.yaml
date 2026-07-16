@@ -2,8 +2,9 @@
 vars:
   - path:
       # Path are relative to location of dvc.yaml file
-      scripts: ../../src/logatec
+      scripts: ../../src/datasets/logatec
       common: ../../src
+      benchmarking: ../../src/benchmarking
       data: ../../artifacts/Benchmarking/data
       models: ../../artifacts/Benchmarking/models
       reports: ../../artifacts/Benchmarking/reports
@@ -17,10 +18,12 @@ stages:
       subset: ${subsets}
     cmd: |
       unzip -j ${path.data}/raw/logatec.zip ${item.subset}_data.json -d ${path.data}/raw/
-      python ${path.scripts}/prepare.py --method average --input ${path.data}/raw/${item.subset}_data.json --output ${path.data}/interim/${item.subset}.pkl
+      python ${path.benchmarking}/wrapper.py --output ${path.reports}/usage/prepare-${item.subset}_usage.pkl -- python ${path.scripts}/prepare.py --method average --input ${path.data}/raw/${item.subset}_data.json --output ${path.data}/interim/${item.subset}.pkl
       rm ${path.data}/raw/${item.subset}_data.json
     deps:
       - ${path.scripts}/prepare.py
+      - ${path.benchmarking}/wrapper.py
+      - ${path.benchmarking}/performance.py
       - ${path.data}/raw/logatec.zip
     outs:
       - ${path.data}/interim/${item.subset}.pkl
@@ -30,11 +33,13 @@ stages:
     matrix:
       subset: ${subsets}
     cmd: >
-      python ${path.scripts}/featurize.py
+      python ${path.benchmarking}/wrapper.py --output ${path.reports}/usage/featurize-${item.subset}_usage.pkl -- python ${path.scripts}/featurize.py
       --input ${path.data}/interim/${item.subset}.pkl
       --output ${path.data}/prepared/${item.subset}.pkl
     deps:
       - ${path.scripts}/featurize.py
+      - ${path.benchmarking}/wrapper.py
+      - ${path.benchmarking}/performance.py
       - ${path.data}/interim/${item.subset}.pkl
     outs:
       - ${path.data}/prepared/${item.subset}.pkl
@@ -46,12 +51,14 @@ stages:
       subset: ${subsets}
       split: ${split.types}
     cmd: >
-      python ${path.scripts}/split.py
+      python ${path.benchmarking}/wrapper.py --output ${path.reports}/usage/split-${item.subset}-${item.split}_usage.pkl -- python ${path.scripts}/split.py
       --input ${path.data}/prepared/${item.subset}.pkl
       --split ${item.split}
       --output-indices ${path.data}/splits/${item.subset}-${item.split}Split.pkl
     deps:
       - ${path.scripts}/split.py
+      - ${path.benchmarking}/wrapper.py
+      - ${path.benchmarking}/performance.py
       - ${path.data}/prepared/${item.subset}.pkl
     outs:
       - ${path.data}/splits/${item.subset}-${item.split}Split.pkl
@@ -64,7 +71,7 @@ stages:
       split: ${split.types}
       model: ${gridsearch}
     cmd: >
-      python ${path.common}/benchmark.py
+      python ${path.benchmarking}/wrapper.py --output ${path.reports}/usage/gridsearch-${item.subset}-${item.split}-${item.model}_usage.pkl -- python ${path.common}/benchmark.py
       --use ${item.model}
       --optimizer gridsearch
       --data ${path.data}/prepared/${item.subset}.pkl
@@ -72,6 +79,8 @@ stages:
       --output-results ${path.models}/gridsearch-${item.subset}-${item.split}-${item.model}/${item.subset}-${item.model}-${item.split}Split-results.pkl
     deps:
       - ${path.common}/benchmark.py
+      - ${path.benchmarking}/wrapper.py
+      - ${path.benchmarking}/performance.py
       - ${path.data}/prepared/${item.subset}.pkl
       - ${path.data}/splits/${item.subset}-${item.split}Split.pkl
     outs:
@@ -84,7 +93,7 @@ stages:
       split: ${split.types}
       model: ${automl}
     cmd: >
-      python ${path.common}/benchmark.py
+      python ${path.benchmarking}/wrapper.py --output ${path.reports}/usage/automl-${item.subset}-${item.split}-${item.model}_usage.pkl -- python ${path.common}/benchmark.py
       --use ${item.model}
       --optimizer automl
       --data ${path.data}/prepared/${item.subset}.pkl
@@ -94,8 +103,9 @@ stages:
       - automl.${item.model}
     deps:
       - ${path.common}/benchmark.py
+      - ${path.benchmarking}/wrapper.py
+      - ${path.benchmarking}/performance.py
       - ${path.data}/prepared/${item.subset}.pkl
       - ${path.data}/splits/${item.subset}-${item.split}Split.pkl
     outs:
       - ${path.models}/automl-${item.subset}-${item.split}-${item.model}/${item.subset}-${item.model}-${item.split}Split-results.pkl
-

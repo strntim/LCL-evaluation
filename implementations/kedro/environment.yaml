@@ -1,0 +1,10 @@
+name: kedro
+
+channels:
+  - conda-forge
+  - nodefaults
+
+dependencies:
+  - python=3.11.13
+  - pip
+  - kedro=1.5.0

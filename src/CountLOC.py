@@ -7,8 +7,9 @@ from rich.syntax import Syntax
 from rich.text import Text
 import sys
 
-NOTEBOOKS_PATH = Path("./JupyterNotebooks")
-CONFIGS_PATH = Path("./LOCALIZE_Configs")
+ROOT = Path(__file__).resolve().parents[1]
+NOTEBOOKS_PATH = ROOT / "implementations" / "jupyter" / "notebooks"
+CONFIGS_PATH = ROOT / "implementations" / "localize" / "configs"
 
 def is_blank(line):
     return line.strip() == ""

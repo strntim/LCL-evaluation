@@ -283,6 +283,9 @@ $RECYCLE.BIN/
 lightning_logs/
 logs/
 tmp/
+implementations/localize/install/
+implementations/jupyter/results/
+/datasets/*
 
 
 #/**/data/**
@@ -318,3 +321,10 @@ auto_model/
 #!**/*.dvc
 #!**/*.py
 #!**/dvc.lock
+
+!/datasets/umu/
+/datasets/umu/*
+!/datasets/umu/umu.zip
+!/datasets/logatec/
+/datasets/logatec/*
+!/datasets/logatec/logatec.zip
