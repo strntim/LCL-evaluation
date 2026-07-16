@@ -27,3 +27,4 @@ fi
 bash "${root}/tools/create_environments.sh"
 bash "${root}/tools/install_kedro.sh"
 bash "${root}/tools/link_resources.sh"
+bash "${root}/tools/extract_datasets.sh"
