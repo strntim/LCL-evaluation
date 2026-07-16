@@ -27,4 +27,4 @@ else
     git clone "${source_repo}" "${install}"
 fi
 
-rsync -a --delete "${root}/implementations/localize/configs/" "${install}/configs/"
+bash "${root}/tools/sync_localize_configs.sh"

@@ -2,7 +2,6 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source_configs="${root}/implementations/localize/configs"
 install="${root}/implementations/localize/install"
 
 if [[ "${LOCALIZE_RUNNER_IN_ENV:-}" != "1" ]]; then
@@ -11,7 +10,7 @@ if [[ "${LOCALIZE_RUNNER_IN_ENV:-}" != "1" ]]; then
         exit 1
     fi
 
-    rsync -a --delete "${source_configs}/" "${install}/configs/"
+    bash "${root}/tools/sync_localize_configs.sh"
     bash "${root}/tools/link_resources.sh"
     exec mamba run -n nancy env LOCALIZE_RUNNER_IN_ENV=1 bash "$0" "$@"
 fi

@@ -4,6 +4,7 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 datasets="${root}/datasets"
 install="${root}/implementations/localize/install"
+configs="${root}/implementations/localize/configs"
 
 if [[ "${1:-}" == "--help" ]]; then
     echo "Usage: $0"
@@ -40,7 +41,7 @@ fi
 
 link "${install}/src/benchmarking" "../../../../src/benchmarking"
 
-for config in "${install}/configs"/*; do
+for config in "${configs}"/*; do
     dvc_file="${config}/dvc.yaml"
     [[ -f "${dvc_file}" ]] || continue
 
