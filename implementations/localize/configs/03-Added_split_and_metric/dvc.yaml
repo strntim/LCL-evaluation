@@ -16,7 +16,7 @@ stages:
     matrix:
       subset: ${subsets}
     cmd: |
-      unzip -j ${path.data}/raw/logatec.zip ${item.subset}_data.json -d ${path.data}/raw/
+      unzip -o -j ${path.data}/raw/logatec.zip ${item.subset}_data.json -d ${path.data}/raw/
       python ${path.scripts}/prepare.py --method average --input ${path.data}/raw/${item.subset}_data.json --output ${path.data}/interim/${item.subset}.pkl
       rm ${path.data}/raw/${item.subset}_data.json
     deps:

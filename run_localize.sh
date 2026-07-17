@@ -35,44 +35,18 @@ run_sequential() {
     run_pipeline Benchmarking "$@"
 }
 
-run_parallel() {
-    local config pipeline failed pid
-    local -a pids=()
-    for config in "${install}/configs"/*; do
-        pipeline="$(basename "${config}")"
-        if [[ "${pipeline}" == "Benchmarking" || ! -f "${config}/dvc.yaml" ]]; then
-            continue
-        fi
-        (run_pipeline "${pipeline}" "$@") &
-        pids+=("$!")
-    done
-
-    failed=0
-    for pid in "${pids[@]}"; do
-        if ! wait "${pid}"; then
-            failed=1
-        fi
-    done
-    if [[ "${failed}" -ne 0 ]]; then
-        exit 1
-    fi
-
-    run_pipeline Benchmarking "$@"
-}
-
 if [[ $# -eq 0 ]]; then
     run_sequential
     exit 0
 fi
 
 if [[ "${1}" == "-p" || "${1}" == "--parallel" ]]; then
-    shift
-    run_parallel "$@"
-    exit 0
+    echo "Parallel LOCALIZE runs are not supported." >&2
+    exit 1
 fi
 
 if [[ "${1}" == "--help" ]]; then
-    echo "Usage: $0 [DVC_REPRO_OPTIONS...] | $0 --parallel [DVC_REPRO_OPTIONS...] | $0 PIPELINE [DVC_REPRO_OPTIONS...]"
+    echo "Usage: $0 [DVC_REPRO_OPTIONS...] | $0 PIPELINE [DVC_REPRO_OPTIONS...]"
     exit 0
 fi
 

@@ -13,7 +13,7 @@ stages:
   prepare:
     desc: Prepare UMU dataset for the MLOps pipeline
     cmd: |
-      unzip ${path.data}/raw/umu.zip -d ${path.data}/raw/
+      unzip -o ${path.data}/raw/umu.zip -d ${path.data}/raw/
       python ${path.scripts}/prepare.py --method average --input ${path.data}/raw/umu/tcp_nokia_20240325.xlsx --output ${path.data}/interim/umu.pkl
       rm ${path.data}/raw/umu/*.xlsx
       rm ${path.data}/raw/__MACOSX/umu/.*.xlsx
