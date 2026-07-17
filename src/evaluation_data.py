@@ -27,6 +27,15 @@ EXPECTED_USAGE_COUNTS = {
 }
 EXPECTED_REPORT_COUNT = 12
 REQUIRED_USAGE_COLUMNS = {"t", "cpu_cores", "ram_mb", "memory_metric"}
+SUBSETS = ("spring", "winter")
+SPLITS = ("KFold", "Random")
+GRIDSEARCH_MODELS = ("RandomForestRegressor", "KNeighborsRegressor")
+GRIDSEARCH_RESULT_COLUMNS = (
+    "mean_test_rmse",
+    "std_test_rmse",
+    "mean_test_r_squared",
+    "std_test_r_squared",
+)
 
 
 def resolve_evaluation_dir(root: Path, value: str | Path | None = None) -> Path:
@@ -59,6 +68,49 @@ def report_paths(run_dir: Path) -> list[Path]:
         for path in directory.rglob("*.pkl")
         if "result" in path.name.lower()
     )
+
+
+def find_report(run_dir: Path, filename: str) -> Path:
+    matches = list((run_dir / "reports").rglob(filename))
+    if len(matches) != 1:
+        raise FileNotFoundError(
+            f"Expected one {filename} in {run_dir / 'reports'}, found {len(matches)}"
+        )
+    return matches[0]
+
+
+def load_report(path: Path, implementation: str):
+    report = joblib.load(path)
+
+    if implementation == "localize":
+        if not isinstance(report, dict):
+            raise TypeError(f"LOCALIZE report is not a dictionary: {path}")
+        model_reports = report.get("model_data", {}).get("reports")
+        if not isinstance(model_reports, list) or not model_reports:
+            raise ValueError(f"LOCALIZE report has no model reports: {path}")
+        for model_report in model_reports:
+            required = {"scores", "params", "fit_time", "score_time"}
+            if not isinstance(model_report, dict) or not required.issubset(model_report):
+                raise ValueError(f"LOCALIZE model report has an invalid structure: {path}")
+        return report
+
+    if implementation == "jupyter":
+        if isinstance(report, pd.DataFrame):
+            required = {"params", *GRIDSEARCH_RESULT_COLUMNS}
+            missing = required.difference(report.columns)
+            if missing:
+                raise ValueError(f"Notebook grid-search report is missing {sorted(missing)}: {path}")
+            if report.empty:
+                raise ValueError(f"Notebook grid-search report is empty: {path}")
+            return report
+        if isinstance(report, list) and report and isinstance(report[0], dict):
+            required = {"scores", "params", "fit_time", "score_time"}
+            if not required.issubset(report[0]):
+                raise ValueError(f"Notebook AutoML report has an invalid structure: {path}")
+            return report
+        raise TypeError(f"Notebook report has an unexpected type: {path}")
+
+    raise ValueError(f"Unknown implementation: {implementation}")
 
 
 def load_usage(path: Path) -> pd.DataFrame:
@@ -98,6 +150,112 @@ def validate_run(run_dir: Path, implementation: str) -> None:
         raise ValueError(
             f"Expected {EXPECTED_REPORT_COUNT} result reports in {run_dir}, found {len(reports)}"
         )
+    for path in reports:
+        load_report(path, implementation)
+
+
+def _parameter_key(parameters: object) -> str:
+    def normalize(value: object):
+        if isinstance(value, dict):
+            return {str(key): normalize(item) for key, item in sorted(value.items())}
+        if isinstance(value, (list, tuple)):
+            return [normalize(item) for item in value]
+        if isinstance(value, np.generic):
+            return value.item()
+        return value
+
+    return json.dumps(normalize(parameters), sort_keys=True, default=str)
+
+
+def _gridsearch_values(frame: pd.DataFrame) -> dict[str, np.ndarray]:
+    missing = {"params", *GRIDSEARCH_RESULT_COLUMNS}.difference(frame.columns)
+    if missing:
+        raise ValueError(f"Grid-search results are missing columns: {sorted(missing)}")
+
+    values = {}
+    for _, row in frame.iterrows():
+        key = _parameter_key(row["params"])
+        if key in values:
+            raise ValueError(f"Duplicate grid-search parameters: {key}")
+        values[key] = np.asarray(
+            [
+                abs(float(row["mean_test_rmse"])),
+                float(row["std_test_rmse"]),
+                float(row["mean_test_r_squared"]),
+                float(row["std_test_r_squared"]),
+            ]
+        )
+    return values
+
+
+def _compare_gridsearch(localize_path: Path, jupyter_path: Path) -> None:
+    localize = load_report(localize_path, "localize")
+    jupyter = load_report(jupyter_path, "jupyter")
+    localize_values = _gridsearch_values(
+        localize["optimizer_data"]["additional_data"]["results"]
+    )
+    jupyter_values = _gridsearch_values(jupyter)
+
+    if localize_values.keys() != jupyter_values.keys():
+        raise ValueError(
+            f"Grid-search candidates differ between {localize_path.name} and {jupyter_path.name}"
+        )
+    for key in localize_values:
+        if not np.allclose(
+            localize_values[key], jupyter_values[key], rtol=1e-6, atol=1e-8, equal_nan=True
+        ):
+            raise ValueError(
+                f"Grid-search scores differ for parameters {key}: "
+                f"{localize_path.name} != {jupyter_path.name}"
+            )
+
+
+def _compare_automl(localize_path: Path, jupyter_path: Path) -> None:
+    localize = load_report(localize_path, "localize")["model_data"]["reports"][0]
+    jupyter = load_report(jupyter_path, "jupyter")[0]
+
+    if _parameter_key(localize["params"]) != _parameter_key(jupyter["params"]):
+        raise ValueError(
+            f"AutoML parameters differ between {localize_path.name} and {jupyter_path.name}"
+        )
+
+    for metric in ("rmse", "r_squared"):
+        for statistic in ("mean", "std"):
+            localize_value = float(localize["scores"][metric][statistic])
+            jupyter_value = float(jupyter["scores"][metric][statistic])
+            if not np.isclose(
+                localize_value, jupyter_value, rtol=1e-6, atol=1e-8, equal_nan=True
+            ):
+                raise ValueError(
+                    f"AutoML {metric} {statistic} differs between "
+                    f"{localize_path.name} and {jupyter_path.name}"
+                )
+
+
+def validate_benchmark_outputs(evaluation_dir: Path, runs: int) -> None:
+    for run_number in range(1, runs + 1):
+        localize_run = evaluation_dir / "benchmark" / "localize" / f"run-{run_number:02d}"
+        jupyter_run = evaluation_dir / "benchmark" / "jupyter" / f"run-{run_number:02d}"
+        validate_run(localize_run, "localize")
+        validate_run(jupyter_run, "jupyter")
+
+        for subset in SUBSETS:
+            for split in SPLITS:
+                for model in GRIDSEARCH_MODELS:
+                    _compare_gridsearch(
+                        find_report(localize_run, f"{subset}-{model}-{split}Split-results.pkl"),
+                        find_report(
+                            jupyter_run,
+                            f"Results_{model}-{split}Split-{subset}Subset.pkl",
+                        ),
+                    )
+                _compare_automl(
+                    find_report(localize_run, f"{subset}-ExampleModel-{split}Split-results.pkl"),
+                    find_report(
+                        jupyter_run,
+                        f"Results_ExampleModel-{split}Split-{subset}Subset.pkl",
+                    ),
+                )
 
 
 def summarize_stage(run_dir: Path, stage: str) -> dict[str, object]:

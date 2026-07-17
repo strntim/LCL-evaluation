@@ -6,6 +6,8 @@ import platform
 import shutil
 import subprocess
 import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
@@ -143,7 +145,7 @@ def localize_benchmark(session: Path, run_number: int) -> None:
     collect_unit(
         session / "benchmark" / "localize" / f"run-{run_number:02d}",
         "localize",
-        ["bash", str(ROOT / "run_localize.sh"), "Benchmarking", "--force"],
+        ["bash", str(ROOT / "tools" / "run_localize.sh"), "Benchmarking", "--force"],
         lambda: clean_localize("Benchmarking"),
         artifact / "reports" / "usage",
         artifact / "models",
@@ -169,7 +171,7 @@ def scalability(session: Path, factor: int) -> None:
         "localize",
         [
             "bash",
-            str(ROOT / "run_localize.sh"),
+            str(ROOT / "tools" / "run_localize.sh"),
             "Scalability",
             "--scale",
             str(factor),
@@ -179,6 +181,41 @@ def scalability(session: Path, factor: int) -> None:
         artifact / "reports" / "usage",
         artifact / "models",
     )
+
+
+def run_sequential(session: Path, runs: int) -> None:
+    for run_number in range(1, runs + 1):
+        localize_benchmark(session, run_number)
+        jupyter_benchmark(session, run_number)
+    for factor in (1, 5, 10):
+        scalability(session, factor)
+
+
+def run_localize_evaluation(session: Path, runs: int) -> None:
+    for run_number in range(1, runs + 1):
+        localize_benchmark(session, run_number)
+    for factor in (1, 5, 10):
+        scalability(session, factor)
+
+
+def run_jupyter_evaluation(session: Path, runs: int) -> None:
+    for run_number in range(1, runs + 1):
+        jupyter_benchmark(session, run_number)
+
+
+def run_parallel(session: Path, runs: int, stagger_seconds: float) -> None:
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        print("Starting Jupyter evaluation", flush=True)
+        jupyter = executor.submit(run_jupyter_evaluation, session, runs)
+        if stagger_seconds:
+            print(
+                f"Starting LOCALIZE evaluation in {stagger_seconds:g} seconds",
+                flush=True,
+            )
+            time.sleep(stagger_seconds)
+        localize = executor.submit(run_localize_evaluation, session, runs)
+        jupyter.result()
+        localize.result()
 
 
 def create_session(args: argparse.Namespace) -> Path:
@@ -218,12 +255,17 @@ def update_metadata(session: Path, runs: int, status: str) -> None:
     write_json(path, metadata)
 
 
-def print_dry_run(runs: int) -> None:
+def print_dry_run(runs: int, parallel: bool, stagger_seconds: float) -> None:
+    if parallel:
+        print("parallel streams:")
+        print("  Jupyter benchmark runs")
+        print(f"  LOCALIZE benchmark and scalability runs after {stagger_seconds:g} seconds")
     for run_number in range(1, runs + 1):
         print(f"run-{run_number:02d}: LOCALIZE Benchmarking --force")
         print(f"run-{run_number:02d}: Jupyter Benchmarking")
     for factor in (1, 5, 10):
         print(f"scalability: LOCALIZE {factor}x --force")
+    print("validate LOCALIZE and Jupyter results")
     print("calculate loc.json")
     print("generate paper figures")
 
@@ -235,26 +277,39 @@ def main() -> int:
     parser.add_argument("--runs", type=int, default=5)
     parser.add_argument("--resume")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("-p", "--parallel", action="store_true")
+    parser.add_argument("--stagger-seconds", type=float, default=5.0)
     args = parser.parse_args()
 
     if args.runs < 1:
         parser.error("--runs must be at least 1")
+    if args.stagger_seconds < 0:
+        parser.error("--stagger-seconds cannot be negative")
     if args.dry_run:
-        print_dry_run(args.runs)
+        print_dry_run(args.runs, args.parallel, args.stagger_seconds)
         return 0
+
+    from evaluation_data import validate_benchmark_outputs
 
     session = create_session(args)
     print(f"Evaluation session: {session}", flush=True)
     update_metadata(session, args.runs, "running")
 
     try:
-        for run_number in range(1, args.runs + 1):
-            localize_benchmark(session, run_number)
-            jupyter_benchmark(session, run_number)
+        if args.parallel:
+            run_parallel(session, args.runs, args.stagger_seconds)
+        else:
+            run_sequential(session, args.runs)
 
-        for factor in (1, 5, 10):
-            scalability(session, factor)
-
+        validate_benchmark_outputs(session, args.runs)
+        write_json(
+            session / "validation.json",
+            {
+                "validated": iso_time(),
+                "implementations": ["localize", "jupyter"],
+                "runs": args.runs,
+            },
+        )
         write_json(session / "loc.json", calculate_loc_changes(ROOT))
         run_command(
             [
