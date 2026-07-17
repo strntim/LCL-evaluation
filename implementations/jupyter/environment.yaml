@@ -22,6 +22,7 @@ dependencies:
   - pandas=2.1.4
   - py-xgboost-cpu=2.1.4
   - jupyterlab=4.0.11
+  - ipykernel
   - ipywidgets
   - jupyterlab_widgets
   - texlive-core

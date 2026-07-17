@@ -54,7 +54,7 @@ def execute(name: str) -> int:
 
     client = NotebookClient(
         notebook,
-        kernel_name="python3",
+        kernel_name="jupyter",
         timeout=None,
         resources={"metadata": {"path": str(RESULTS)}},
     )

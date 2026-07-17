@@ -31,4 +31,5 @@ create_environment() {
 
 create_environment nancy "${localize_environment}"
 create_environment jupyter "${root}/implementations/jupyter/environment.yaml"
+mamba run -n jupyter python -m ipykernel install --user --name jupyter --display-name "Python (jupyter)"
 create_environment kedro "${root}/implementations/kedro/environment.yaml"
