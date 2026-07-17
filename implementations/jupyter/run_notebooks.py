@@ -71,7 +71,7 @@ def main() -> int:
     names = notebook_names()
     parser = argparse.ArgumentParser()
     parser.add_argument("notebook", nargs="?", choices=names)
-    parser.add_argument("--all", action="store_true")
+    parser.add_argument("-p", "--parallel", action="store_true")
     parser.add_argument("--run-one", choices=names, help=argparse.SUPPRESS)
     args = parser.parse_args()
 
@@ -80,11 +80,14 @@ def main() -> int:
 
     prepare_datasets()
 
-    if args.all:
-        if args.notebook:
-            parser.error("--all cannot be used with a notebook name")
+    if args.parallel and args.notebook:
+        parser.error("--parallel cannot be used with a notebook name")
 
-        regular_notebooks = [name for name in names if name != BENCHMARK]
+    if args.notebook:
+        return execute(args.notebook)
+
+    regular_notebooks = [name for name in names if name != BENCHMARK]
+    if args.parallel:
         processes = [
             subprocess.Popen([sys.executable, __file__, "--run-one", name])
             for name in regular_notebooks
@@ -94,9 +97,10 @@ def main() -> int:
             return 1
         return execute(BENCHMARK)
 
-    if not args.notebook:
-        parser.error("provide a notebook name or --all")
-    return execute(args.notebook)
+    for name in regular_notebooks:
+        if execute(name) != 0:
+            return 1
+    return execute(BENCHMARK)
 
 
 if __name__ == "__main__":

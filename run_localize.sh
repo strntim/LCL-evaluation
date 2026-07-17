@@ -22,9 +22,22 @@ run_pipeline() {
     dvc repro "$@"
 }
 
-if [[ "${1:-}" == "--all" ]]; then
-    shift
-    pids=()
+run_sequential() {
+    local config pipeline
+    for config in "${install}/configs"/*; do
+        pipeline="$(basename "${config}")"
+        if [[ "${pipeline}" == "Benchmarking" || ! -f "${config}/dvc.yaml" ]]; then
+            continue
+        fi
+        run_pipeline "${pipeline}" "$@"
+    done
+
+    run_pipeline Benchmarking "$@"
+}
+
+run_parallel() {
+    local config pipeline failed pid
+    local -a pids=()
     for config in "${install}/configs"/*; do
         pipeline="$(basename "${config}")"
         if [[ "${pipeline}" == "Benchmarking" || ! -f "${config}/dvc.yaml" ]]; then
@@ -45,12 +58,27 @@ if [[ "${1:-}" == "--all" ]]; then
     fi
 
     run_pipeline Benchmarking "$@"
+}
+
+if [[ $# -eq 0 ]]; then
+    run_sequential
     exit 0
 fi
 
-if [[ $# -eq 0 ]]; then
-    echo "Usage: $0 PIPELINE [DVC_REPRO_OPTIONS...] | $0 --all [DVC_REPRO_OPTIONS...]" >&2
-    exit 1
+if [[ "${1}" == "-p" || "${1}" == "--parallel" ]]; then
+    shift
+    run_parallel "$@"
+    exit 0
+fi
+
+if [[ "${1}" == "--help" ]]; then
+    echo "Usage: $0 [DVC_REPRO_OPTIONS...] | $0 --parallel [DVC_REPRO_OPTIONS...] | $0 PIPELINE [DVC_REPRO_OPTIONS...]"
+    exit 0
+fi
+
+if [[ "${1}" == -* ]]; then
+    run_sequential "$@"
+    exit 0
 fi
 
 pipeline="$1"
