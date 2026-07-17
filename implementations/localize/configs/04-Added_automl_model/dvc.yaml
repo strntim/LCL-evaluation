@@ -2,7 +2,7 @@
 vars:
   - path:
       # Path are relative to location of dvc.yaml file
-      scripts: ../../src/logatec
+      scripts: ../../src/datasets/logatec
       common: ../../src
       data: ../../artifacts/04-Added_automl_model/data
       models: ../../artifacts/04-Added_automl_model/models

@@ -26,7 +26,7 @@ create_environment() {
         echo "Environment already exists: ${name}"
         return
     fi
-    mamba env create -f "${file}"
+    mamba env create --yes -f "${file}"
 }
 
 create_environment nancy "${localize_environment}"

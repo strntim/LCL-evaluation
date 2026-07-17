@@ -12,4 +12,6 @@ for config in "${install}/configs"/*; do
     rm -rf "${install}/artifacts/${name}"
 done
 
-rsync -a --delete "${source_configs}/" "${install}/configs/"
+rm -rf "${install}/configs"
+mkdir -p "${install}/configs"
+cp -a "${source_configs}/." "${install}/configs/"

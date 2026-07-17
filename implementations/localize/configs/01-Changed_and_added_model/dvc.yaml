@@ -2,7 +2,7 @@
 vars:
   - path:
       # Path are relative to location of dvc.yaml file
-      scripts: ../../src/umu
+      scripts: ../../src/datasets/umu
       common: ../../src
       data: ../../artifacts/01-Changed_and_added_model/data
       models: ../../artifacts/01-Changed_and_added_model/models
