@@ -55,7 +55,14 @@ for config in "${configs}"/*; do
         exit 1
     fi
 
-    raw="${install}/artifacts/$(basename "${config}")/data/raw"
-    mkdir -p "${raw}"
+    artifacts="${install}/artifacts/$(basename "${config}")"
+    mkdir -p \
+        "${artifacts}/data/raw" \
+        "${artifacts}/data/interim" \
+        "${artifacts}/data/prepared" \
+        "${artifacts}/data/splits" \
+        "${artifacts}/models" \
+        "${artifacts}/reports"
+    raw="${artifacts}/data/raw"
     link "${raw}/${archive}" "../../../../../../../datasets/${dataset}/${archive}"
 done
