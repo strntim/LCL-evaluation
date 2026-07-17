@@ -283,6 +283,9 @@ $RECYCLE.BIN/
 lightning_logs/
 logs/
 tmp/
+/artifacts/
+/results/*
+!/results/.gitkeep
 implementations/localize/install/
 implementations/jupyter/results/
 /datasets/*

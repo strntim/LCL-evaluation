@@ -1,172 +1,162 @@
-from pathlib import Path
-import re
+import argparse
 import json
-import os
-from rich.console import Console
-from rich.syntax import Syntax
-from rich.text import Text
-import sys
+import re
+from pathlib import Path
+
 
 ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOKS_PATH = ROOT / "implementations" / "jupyter" / "notebooks"
-CONFIGS_PATH = ROOT / "implementations" / "localize" / "configs"
+EXPERIMENTS = (
+    "00-Initial",
+    "01-Changed_and_added_model",
+    "02-Changed_dataset_to_logatec",
+    "03-Added_split_and_metric",
+    "04-Added_automl_model",
+)
 
-def is_blank(line):
+
+def is_blank(line: str) -> bool:
     return line.strip() == ""
 
-def strip_comment(line):
+
+def strip_comment(line: str) -> str:
     line = line.split("#", 1)[0]
-    line = re.sub(r'("""|\'\'\')(.*?)\1', '', line)
+    line = re.sub(r'("""|\'\'\')(.*?)\1', "", line)
     return line.rstrip()
 
-def strip_structural(line):
-    return "".join([token for token in line if token not in "{}[](),"])
 
-def is_meaningful_line(line):
+def strip_structural(line: str) -> str:
+    return "".join(token for token in line if token not in "{}[](),")
+
+
+def is_meaningful_line(line: str) -> bool:
     if is_blank(line):
         return False
     if is_blank(strip_comment(line)):
         return False
-    if is_blank(strip_structural(line)):
-        return False
-    return True
+    return not is_blank(strip_structural(line))
 
-def strip_meaningless(lines):
+
+def strip_meaningless(lines: list[str]) -> list[str]:
     return [strip_comment(line) for line in lines if is_meaningful_line(line)]
 
-def extract_code_lines_notebook(ipynb_path):
-    """Extracts code lines from a Jupyter notebook (.ipynb) as a list of strings."""
-    with open(ipynb_path, 'r', encoding='utf-8') as f:
-        notebook = json.load(f)
+
+def notebook_lines(path: Path) -> list[str]:
+    with path.open(encoding="utf-8") as file:
+        notebook = json.load(file)
 
     lines = []
     for cell in notebook.get("cells", []):
         if cell.get("cell_type") == "code":
-            lines.extend(cell.get("source", []))  # source is already a list of lines
-            lines.append("\n")  # separate cells with a newline
+            lines.extend(cell.get("source", []))
+            lines.append("\n")
     return lines
 
-def keep_unique_lines(lines, other):
-    out = []
-    other = [line.strip() for line in other]
+
+def config_lines(path: Path) -> list[str]:
+    return path.read_text(encoding="utf-8").splitlines(keepends=True)
+
+
+def keep_unique_lines(lines: list[str], other: list[str]) -> list[str]:
+    remaining = [line.strip() for line in other]
+    unique = []
     for line in lines:
         stripped = line.strip()
-        if stripped in other:
-            other.remove(stripped)
+        if stripped in remaining:
+            remaining.remove(stripped)
         else:
-            out.append(line)
-    return out
+            unique.append(line)
+    return unique
 
-def remove_unwanted_lines(lines, notebook):
-    return [line for line in lines if notebook.stem not in line]
 
-def color_diff_lines(lines, prefix, prefix_style):
-    styled = []
-    for line in lines:
-        # Create a Text object
-        text = Text(end = "")
-        text.append(f"{prefix} ", style=prefix_style)
-        code = line.strip("\n")
-        syntax = Syntax(code, "python", theme="monokai", line_numbers=False, word_wrap=False) 
-        hlcd = syntax.highlight(code)
-        hlcd.rstrip()
-        text.append(hlcd)  # only highlight the actual code
-        styled.append(text)
-    return styled
+def remove_experiment_references(lines: list[str], experiment: str) -> list[str]:
+    return [line for line in lines if experiment not in line]
 
-notebooks = sorted([Path(file) for file in os.listdir(NOTEBOOKS_PATH) if file.endswith(".ipynb")])
 
-pr = strip_meaningless(extract_code_lines_notebook(NOTEBOOKS_PATH / notebooks[0]))
-pr = remove_unwanted_lines(pr, notebooks[0])
+def count_change(before: list[str], after: list[str]) -> tuple[int, int]:
+    deleted = keep_unique_lines(before, after)
+    added = keep_unique_lines(after, before)
+    return len(added), len(deleted)
 
-chj = {
-    "deleted": [],
-    "added": []
-}
 
-print("Jupyter:")
-for notebook in notebooks[1:5]:
-    c = strip_meaningless(extract_code_lines_notebook(NOTEBOOKS_PATH / notebook))
-    c = remove_unwanted_lines(c, notebook)
+def notebook_changes(root: Path) -> list[tuple[int, int]]:
+    directory = root / "implementations" / "jupyter" / "notebooks"
+    previous_name = EXPERIMENTS[0]
+    previous = strip_meaningless(notebook_lines(directory / f"{previous_name}.ipynb"))
+    previous = remove_experiment_references(previous, previous_name)
+    changes = []
 
-    deleted = keep_unique_lines(pr, c)
-    added   = keep_unique_lines(c, pr)
+    for name in EXPERIMENTS[1:]:
+        current = strip_meaningless(notebook_lines(directory / f"{name}.ipynb"))
+        current = remove_experiment_references(current, name)
+        changes.append(count_change(previous, current))
+        previous = current
 
-    deleted_styled = color_diff_lines(deleted, "-", "bold red")
-    added_styled   = color_diff_lines(added, "+", "bold green")
+    return changes
 
-    pr = c
 
-    console = Console(
-        force_jupyter=False,
-        force_terminal=True,
-        file=sys.stdout,
-    )
+def localize_changes(root: Path) -> list[tuple[int, int]]:
+    directory = root / "implementations" / "localize" / "configs"
+    totals = [[0, 0] for _ in EXPERIMENTS[1:]]
 
-    console.print(f"  [bold red]lines deleted:[/] {len(deleted)}")
-    console.print(f"  [green]lines added:[/] {len(added)}")
-    print("____________________\n")
-    chj["deleted"].append(len(deleted))
-    chj["added"].append(len(added))
+    for filename in ("dvc.yaml", "params.yaml"):
+        previous_name = EXPERIMENTS[0]
+        previous = strip_meaningless(config_lines(directory / previous_name / filename))
+        previous = remove_experiment_references(previous, previous_name)
 
-configs = sorted([Path(file) for file in os.listdir(CONFIGS_PATH)])[1:6]
+        for index, name in enumerate(EXPERIMENTS[1:]):
+            current = strip_meaningless(config_lines(directory / name / filename))
+            current = remove_experiment_references(current, name)
+            added, deleted = count_change(previous, current)
+            totals[index][0] += added
+            totals[index][1] += deleted
+            previous = current
 
-def extract_code_lines_yaml(path):
-    with open(path, 'r', encoding='utf-8') as f:
-        return f.readlines()
+    return [(added, deleted) for added, deleted in totals]
 
-def color_diff_lines(lines, prefix, prefix_style):
-    styled = []
-    for line in lines:
-        # Create a Text object
-        text = Text(end = "")
-        text.append(f"{prefix} ", style=prefix_style)
-        code = line.strip("\n")
-        syntax = Syntax(code, "yaml", theme="monokai", line_numbers=False, word_wrap=False) 
-        hlcd = syntax.highlight(code)
-        hlcd.rstrip()
-        text.append(hlcd)  # only highlight the actual code
-        styled.append(text)
-    return styled
 
-print("Framework:")
-chf = {
-    "dvc.yaml":{
-        "deleted": [],
-        "added": []
-    },
-    "params.yaml":{
-        "deleted": [],
-        "added": []
-    }
-}
-for cnf in ["dvc.yaml", "params.yaml"]:
-    pr = strip_meaningless(extract_code_lines_yaml(CONFIGS_PATH / configs[0] / cnf))
-    pr = remove_unwanted_lines(pr, configs[0])
-    for config in configs[1:]:
-        print(cnf)
-        c = strip_meaningless(extract_code_lines_yaml(CONFIGS_PATH / config / cnf))
-        c = remove_unwanted_lines(c, config)
+def calculate_loc_changes(root: Path = ROOT) -> list[dict[str, int | str]]:
+    notebook = notebook_changes(root)
+    localize = localize_changes(root)
+    rows = []
 
-        deleted = keep_unique_lines(pr, c)
-        added   = keep_unique_lines(c, pr)
-
-        deleted_styled = color_diff_lines(deleted, "-", "bold red")
-        added_styled   = color_diff_lines(added, "+", "bold green")
-
-        pr = c
-
-        console = Console(
-            force_jupyter=False,
-            force_terminal=True,
-            file=sys.stdout,
-            width = 120
+    for index, (before, after) in enumerate(zip(EXPERIMENTS, EXPERIMENTS[1:]), start=1):
+        localize_added, localize_deleted = localize[index - 1]
+        notebook_added, notebook_deleted = notebook[index - 1]
+        rows.append(
+            {
+                "change": index,
+                "from": before,
+                "to": after,
+                "localize_added": localize_added,
+                "localize_deleted": localize_deleted,
+                "notebook_added": notebook_added,
+                "notebook_deleted": notebook_deleted,
+            }
         )
 
-        console.print(f"  [bold red]lines deleted:[/] {len(deleted)}")
-        console.print(f"  [green]lines added:[/] {len(added)}")
+    return rows
 
-        chf[cnf]["deleted"].append(len(deleted))
-        chf[cnf]["added"].append(len(added))
 
-    print("____________________\n")
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--output", type=Path)
+    args = parser.parse_args()
+    rows = calculate_loc_changes()
+
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(rows, indent=2) + "\n", encoding="utf-8")
+
+    if args.json:
+        print(json.dumps(rows, indent=2))
+        return
+
+    for row in rows:
+        print(f"Change {row['change']}: {row['from']} -> {row['to']}")
+        print(f"  LOCALIZE  +{row['localize_added']} -{row['localize_deleted']}")
+        print(f"  Notebook  +{row['notebook_added']} -{row['notebook_deleted']}")
+
+
+if __name__ == "__main__":
+    main()

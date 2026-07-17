@@ -58,6 +58,7 @@ for config in "${configs}"/*; do
     artifacts="${install}/artifacts/$(basename "${config}")"
     mkdir -p \
         "${artifacts}/data/raw" \
+        "${artifacts}/data/base" \
         "${artifacts}/data/interim" \
         "${artifacts}/data/prepared" \
         "${artifacts}/data/splits" \

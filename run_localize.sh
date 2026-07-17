@@ -26,7 +26,7 @@ run_sequential() {
     local config pipeline
     for config in "${install}/configs"/*; do
         pipeline="$(basename "${config}")"
-        if [[ "${pipeline}" == "Benchmarking" || ! -f "${config}/dvc.yaml" ]]; then
+        if [[ "${pipeline}" == "Benchmarking" || "${pipeline}" == "Scalability" || ! -f "${config}/dvc.yaml" ]]; then
             continue
         fi
         run_pipeline "${pipeline}" "$@"
@@ -47,6 +47,7 @@ fi
 
 if [[ "${1}" == "--help" ]]; then
     echo "Usage: $0 [DVC_REPRO_OPTIONS...] | $0 PIPELINE [DVC_REPRO_OPTIONS...]"
+    echo "       $0 Scalability --scale {1|5|10} [DVC_REPRO_OPTIONS...]"
     exit 0
 fi
 
@@ -60,6 +61,30 @@ shift
 if [[ ! -f "${install}/configs/${pipeline}/dvc.yaml" ]]; then
     echo "Pipeline not found: ${pipeline}" >&2
     exit 1
+fi
+
+if [[ "${pipeline}" == "Scalability" ]]; then
+    scale=""
+    options=()
+    while [[ $# -gt 0 ]]; do
+        if [[ "${1}" == "--scale" ]]; then
+            if [[ $# -lt 2 ]]; then
+                echo "--scale requires a value." >&2
+                exit 1
+            fi
+            scale="$2"
+            shift 2
+            continue
+        fi
+        options+=("$1")
+        shift
+    done
+    if [[ "${scale}" != "1" && "${scale}" != "5" && "${scale}" != "10" ]]; then
+        echo "Scalability requires --scale 1, 5, or 10." >&2
+        exit 1
+    fi
+    SCALE_FACTOR="${scale}" run_pipeline "${pipeline}" "${options[@]}"
+    exit 0
 fi
 
 run_pipeline "${pipeline}" "$@"
