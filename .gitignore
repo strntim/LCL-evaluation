@@ -288,6 +288,10 @@ tmp/
 !/results/.gitkeep
 implementations/localize/install/
 implementations/jupyter/results/
+implementations/kedro/artifacts/*
+!implementations/kedro/artifacts/.gitkeep
+implementations/kedro/logs/
+implementations/kedro/.viz/
 /datasets/*
 
 

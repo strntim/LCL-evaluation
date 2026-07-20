@@ -12,6 +12,13 @@ EXPERIMENTS = (
     "03-Added_split_and_metric",
     "04-Added_automl_model",
 )
+KEDRO_SNAPSHOTS = (
+    "initial",
+    "changed_model",
+    "changed_dataset",
+    "split_metric",
+    "automl",
+)
 
 
 def is_blank(line: str) -> bool:
@@ -54,6 +61,13 @@ def notebook_lines(path: Path) -> list[str]:
 
 def config_lines(path: Path) -> list[str]:
     return path.read_text(encoding="utf-8").splitlines(keepends=True)
+
+
+def source_lines(directory: Path) -> list[str]:
+    lines = []
+    for path in sorted(directory.rglob("*.py")):
+        lines.extend(path.read_text(encoding="utf-8").splitlines(keepends=True))
+    return lines
 
 
 def keep_unique_lines(lines: list[str], other: list[str]) -> list[str]:
@@ -114,14 +128,46 @@ def localize_changes(root: Path) -> list[tuple[int, int]]:
     return [(added, deleted) for added, deleted in totals]
 
 
+def kedro_changes(root: Path) -> list[tuple[int, int]]:
+    implementation = root / "implementations" / "kedro"
+    directory = implementation / "conf"
+    totals = [[0, 0] for _ in EXPERIMENTS[1:]]
+
+    for filename in ("catalog.yml", "parameters.yml"):
+        previous_name = EXPERIMENTS[0]
+        previous = strip_meaningless(config_lines(directory / previous_name / filename))
+        previous = remove_experiment_references(previous, previous_name)
+
+        for index, name in enumerate(EXPERIMENTS[1:]):
+            current = strip_meaningless(config_lines(directory / name / filename))
+            current = remove_experiment_references(current, name)
+            added, deleted = count_change(previous, current)
+            totals[index][0] += added
+            totals[index][1] += deleted
+            previous = current
+
+    snapshots = implementation / "src" / "lcl_evaluation_kedro" / "pipelines" / "experiments"
+    previous = strip_meaningless(source_lines(snapshots / KEDRO_SNAPSHOTS[0]))
+    for index, snapshot in enumerate(KEDRO_SNAPSHOTS[1:]):
+        current = strip_meaningless(source_lines(snapshots / snapshot))
+        added, deleted = count_change(previous, current)
+        totals[index][0] += added
+        totals[index][1] += deleted
+        previous = current
+
+    return [(added, deleted) for added, deleted in totals]
+
+
 def calculate_loc_changes(root: Path = ROOT) -> list[dict[str, int | str]]:
     notebook = notebook_changes(root)
     localize = localize_changes(root)
+    kedro = kedro_changes(root)
     rows = []
 
     for index, (before, after) in enumerate(zip(EXPERIMENTS, EXPERIMENTS[1:]), start=1):
         localize_added, localize_deleted = localize[index - 1]
         notebook_added, notebook_deleted = notebook[index - 1]
+        kedro_added, kedro_deleted = kedro[index - 1]
         rows.append(
             {
                 "change": index,
@@ -131,6 +177,8 @@ def calculate_loc_changes(root: Path = ROOT) -> list[dict[str, int | str]]:
                 "localize_deleted": localize_deleted,
                 "notebook_added": notebook_added,
                 "notebook_deleted": notebook_deleted,
+                "kedro_added": kedro_added,
+                "kedro_deleted": kedro_deleted,
             }
         )
 
@@ -156,6 +204,7 @@ def main() -> None:
         print(f"Change {row['change']}: {row['from']} -> {row['to']}")
         print(f"  LOCALIZE  +{row['localize_added']} -{row['localize_deleted']}")
         print(f"  Notebook  +{row['notebook_added']} -{row['notebook_deleted']}")
+        print(f"  Kedro     +{row['kedro_added']} -{row['kedro_deleted']}")
 
 
 if __name__ == "__main__":

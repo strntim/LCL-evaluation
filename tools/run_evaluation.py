@@ -18,6 +18,8 @@ RESULTS = ROOT / "results" / "evaluations"
 LOCALIZE_ARTIFACTS = ROOT / "implementations" / "localize" / "install" / "artifacts"
 JUPYTER = ROOT / "implementations" / "jupyter"
 JUPYTER_BENCHMARK = JUPYTER / "results" / "artifacts" / "Benchmarking-results"
+KEDRO = ROOT / "implementations" / "kedro"
+KEDRO_BENCHMARK = KEDRO / "artifacts" / "Benchmarking"
 
 sys.path.insert(0, str(SRC))
 
@@ -60,6 +62,10 @@ def clean_localize(name: str) -> None:
 def clean_jupyter() -> None:
     remove(JUPYTER_BENCHMARK)
     remove(JUPYTER / "results" / "Benchmarking-executed.ipynb")
+
+
+def clean_kedro() -> None:
+    remove(KEDRO_BENCHMARK)
 
 
 def copy_usage(source: Path, destination: Path) -> None:
@@ -164,6 +170,17 @@ def jupyter_benchmark(session: Path, run_number: int) -> None:
     )
 
 
+def kedro_benchmark(session: Path, run_number: int) -> None:
+    collect_unit(
+        session / "benchmark" / "kedro" / f"run-{run_number:02d}",
+        "kedro",
+        ["bash", str(ROOT / "tools" / "run_kedro.sh"), "Benchmarking"],
+        clean_kedro,
+        KEDRO_BENCHMARK / "reports" / "usage",
+        KEDRO_BENCHMARK / "reports" / "results",
+    )
+
+
 def scalability(session: Path, factor: int) -> None:
     artifact = LOCALIZE_ARTIFACTS / "Scalability"
     collect_unit(
@@ -187,6 +204,7 @@ def run_sequential(session: Path, runs: int) -> None:
     for run_number in range(1, runs + 1):
         localize_benchmark(session, run_number)
         jupyter_benchmark(session, run_number)
+        kedro_benchmark(session, run_number)
     for factor in (1, 5, 10):
         scalability(session, factor)
 
@@ -203,8 +221,13 @@ def run_jupyter_evaluation(session: Path, runs: int) -> None:
         jupyter_benchmark(session, run_number)
 
 
+def run_kedro_evaluation(session: Path, runs: int) -> None:
+    for run_number in range(1, runs + 1):
+        kedro_benchmark(session, run_number)
+
+
 def run_parallel(session: Path, runs: int, stagger_seconds: float) -> None:
-    with ThreadPoolExecutor(max_workers=2) as executor:
+    with ThreadPoolExecutor(max_workers=3) as executor:
         print("Starting Jupyter evaluation", flush=True)
         jupyter = executor.submit(run_jupyter_evaluation, session, runs)
         if stagger_seconds:
@@ -214,8 +237,16 @@ def run_parallel(session: Path, runs: int, stagger_seconds: float) -> None:
             )
             time.sleep(stagger_seconds)
         localize = executor.submit(run_localize_evaluation, session, runs)
+        if stagger_seconds:
+            print(
+                f"Starting Kedro evaluation in {stagger_seconds:g} seconds",
+                flush=True,
+            )
+            time.sleep(stagger_seconds)
+        kedro = executor.submit(run_kedro_evaluation, session, runs)
         jupyter.result()
         localize.result()
+        kedro.result()
 
 
 def create_session(args: argparse.Namespace) -> Path:
@@ -260,14 +291,17 @@ def print_dry_run(runs: int, parallel: bool, stagger_seconds: float) -> None:
         print("parallel streams:")
         print("  Jupyter benchmark runs")
         print(f"  LOCALIZE benchmark and scalability runs after {stagger_seconds:g} seconds")
+        print(f"  Kedro benchmark runs after another {stagger_seconds:g} seconds")
     for run_number in range(1, runs + 1):
         print(f"run-{run_number:02d}: LOCALIZE Benchmarking --force")
         print(f"run-{run_number:02d}: Jupyter Benchmarking")
+        print(f"run-{run_number:02d}: Kedro Benchmarking")
     for factor in (1, 5, 10):
         print(f"scalability: LOCALIZE {factor}x --force")
-    print("validate LOCALIZE and Jupyter results")
+    print("validate LOCALIZE, Jupyter, and Kedro results")
     print("calculate loc.json")
     print("generate paper figures")
+    print("generate experimental Kedro figures")
 
 
 def main() -> int:
@@ -306,7 +340,7 @@ def main() -> int:
             session / "validation.json",
             {
                 "validated": iso_time(),
-                "implementations": ["localize", "jupyter"],
+                "implementations": ["localize", "jupyter", "kedro"],
                 "runs": args.runs,
             },
         )
@@ -315,6 +349,14 @@ def main() -> int:
             [
                 sys.executable,
                 str(SRC / "plot.py"),
+                "--evaluation-dir",
+                str(session),
+            ]
+        )
+        run_command(
+            [
+                sys.executable,
+                str(SRC / "plot_experimental.py"),
                 "--evaluation-dir",
                 str(session),
             ]

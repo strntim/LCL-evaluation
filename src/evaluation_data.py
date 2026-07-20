@@ -15,6 +15,10 @@ STAGE_NAMES = {
     "automl": "AutoML",
 }
 IMPLEMENTATION_NAMES = {"localize": "LOCALIZE", "jupyter": "Notebook"}
+EXPERIMENTAL_IMPLEMENTATION_NAMES = {
+    **IMPLEMENTATION_NAMES,
+    "kedro": "Kedro",
+}
 EXPECTED_USAGE_COUNTS = {
     "localize": {
         "prepare": 2,
@@ -24,6 +28,7 @@ EXPECTED_USAGE_COUNTS = {
         "automl": 4,
     },
     "jupyter": {stage: 1 for stage in STAGES},
+    "kedro": {stage: 1 for stage in STAGES},
 }
 EXPECTED_REPORT_COUNT = 12
 REQUIRED_USAGE_COLUMNS = {"t", "cpu_cores", "ram_mb", "memory_metric"}
@@ -94,21 +99,33 @@ def load_report(path: Path, implementation: str):
                 raise ValueError(f"LOCALIZE model report has an invalid structure: {path}")
         return report
 
-    if implementation == "jupyter":
+    if implementation in {"jupyter", "kedro"}:
+        label = "Notebook" if implementation == "jupyter" else "Kedro"
         if isinstance(report, pd.DataFrame):
             required = {"params", *GRIDSEARCH_RESULT_COLUMNS}
             missing = required.difference(report.columns)
             if missing:
-                raise ValueError(f"Notebook grid-search report is missing {sorted(missing)}: {path}")
+                raise ValueError(f"{label} grid-search report is missing {sorted(missing)}: {path}")
             if report.empty:
-                raise ValueError(f"Notebook grid-search report is empty: {path}")
+                raise ValueError(f"{label} grid-search report is empty: {path}")
+            if implementation == "kedro":
+                for column in GRIDSEARCH_RESULT_COLUMNS:
+                    values = pd.to_numeric(report[column], errors="coerce").to_numpy()
+                    if not np.isfinite(values).any():
+                        raise ValueError(f"Kedro grid-search column {column} is invalid: {path}")
             return report
         if isinstance(report, list) and report and isinstance(report[0], dict):
             required = {"scores", "params", "fit_time", "score_time"}
             if not required.issubset(report[0]):
-                raise ValueError(f"Notebook AutoML report has an invalid structure: {path}")
+                raise ValueError(f"{label} AutoML report has an invalid structure: {path}")
+            if implementation == "kedro":
+                for metric in ("rmse", "r_squared"):
+                    scores = report[0]["scores"].get(metric, {})
+                    values = [scores.get("mean"), scores.get("std")]
+                    if not all(value is not None and np.isfinite(float(value)) for value in values):
+                        raise ValueError(f"Kedro AutoML metric {metric} is invalid: {path}")
             return report
-        raise TypeError(f"Notebook report has an unexpected type: {path}")
+        raise TypeError(f"{label} report has an unexpected type: {path}")
 
     raise ValueError(f"Unknown implementation: {implementation}")
 
@@ -236,8 +253,10 @@ def validate_benchmark_outputs(evaluation_dir: Path, runs: int) -> None:
     for run_number in range(1, runs + 1):
         localize_run = evaluation_dir / "benchmark" / "localize" / f"run-{run_number:02d}"
         jupyter_run = evaluation_dir / "benchmark" / "jupyter" / f"run-{run_number:02d}"
+        kedro_run = evaluation_dir / "benchmark" / "kedro" / f"run-{run_number:02d}"
         validate_run(localize_run, "localize")
         validate_run(jupyter_run, "jupyter")
+        validate_run(kedro_run, "kedro")
 
         for subset in SUBSETS:
             for split in SPLITS:
@@ -298,9 +317,13 @@ def completed_runs(directory: Path, implementation: str) -> list[Path]:
     return runs
 
 
-def summarize_benchmark(evaluation_dir: Path) -> pd.DataFrame:
+def summarize_benchmark(
+    evaluation_dir: Path,
+    implementation_names: dict[str, str] | None = None,
+) -> pd.DataFrame:
+    implementation_names = implementation_names or IMPLEMENTATION_NAMES
     rows = []
-    for implementation in ("localize", "jupyter"):
+    for implementation, display_name in implementation_names.items():
         runs = completed_runs(evaluation_dir / "benchmark" / implementation, implementation)
         for stage in STAGES:
             summaries = [summarize_stage(run, stage) for run in runs]
@@ -315,7 +338,7 @@ def summarize_benchmark(evaluation_dir: Path) -> pd.DataFrame:
                 )
             rows.append(
                 {
-                    "implementation": IMPLEMENTATION_NAMES[implementation],
+                    "implementation": display_name,
                     "stage": stage,
                     "runs": len(runs),
                     "wall_seconds": np.mean(

@@ -34,6 +34,8 @@ if [[ ! -d "${datasets}" ]]; then
 fi
 
 link "${root}/implementations/jupyter/datasets" "../../datasets"
+link "${root}/implementations/kedro/datasets" "../../datasets"
+link "${root}/implementations/kedro/src/benchmarking" "../../../src/benchmarking"
 
 if [[ ! -d "${install}" ]]; then
     exit 0
