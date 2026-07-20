@@ -205,51 +205,178 @@ def _gridsearch_values(frame: pd.DataFrame) -> dict[str, np.ndarray]:
     return values
 
 
-def _compare_gridsearch(localize_path: Path, jupyter_path: Path) -> None:
-    localize = load_report(localize_path, "localize")
-    jupyter = load_report(jupyter_path, "jupyter")
-    localize_values = _gridsearch_values(
-        localize["optimizer_data"]["additional_data"]["results"]
+def _gridsearch_report_values(path: Path, implementation: str) -> dict[str, np.ndarray]:
+    report = load_report(path, implementation)
+    if implementation == "localize":
+        report = report.get("optimizer_data", {}).get("additional_data", {}).get("results")
+    if not isinstance(report, pd.DataFrame):
+        raise TypeError(f"Grid-search report is not a DataFrame: {path}")
+    return _gridsearch_values(report)
+
+
+def _automl_report_values(path: Path, implementation: str) -> dict[str, np.ndarray]:
+    report = load_report(path, implementation)
+    model_reports = report["model_data"]["reports"] if implementation == "localize" else report
+    if not isinstance(model_reports, list):
+        raise TypeError(f"AutoML report is not a list: {path}")
+
+    values = {}
+    for model_report in model_reports:
+        key = _parameter_key(model_report["params"])
+        if key in values:
+            raise ValueError(f"Duplicate AutoML parameters: {key}")
+        values[key] = np.asarray(
+            [
+                float(model_report["scores"][metric][statistic])
+                for metric in ("rmse", "r_squared")
+                for statistic in ("mean", "std")
+            ]
+        )
+    return values
+
+
+def _compare_values(
+    left: dict[str, np.ndarray],
+    right: dict[str, np.ndarray],
+    kind: str,
+    left_path: Path,
+    right_path: Path,
+) -> None:
+    if left.keys() != right.keys():
+        left_only = sorted(left.keys() - right.keys())
+        right_only = sorted(right.keys() - left.keys())
+        raise ValueError(
+            f"{kind} candidates differ between {left_path} and {right_path}; "
+            f"left only: {left_only}; right only: {right_only}"
+        )
+
+    mismatches = [
+        key
+        for key in left
+        if not np.allclose(left[key], right[key], rtol=1e-6, atol=1e-8, equal_nan=True)
+    ]
+    if mismatches:
+        raise ValueError(
+            f"{kind} scores differ for {len(mismatches)} parameter sets between "
+            f"{left_path} and {right_path}: {mismatches}"
+        )
+
+
+def _compare_gridsearch(
+    left_path: Path,
+    left_implementation: str,
+    right_path: Path,
+    right_implementation: str,
+) -> None:
+    _compare_values(
+        _gridsearch_report_values(left_path, left_implementation),
+        _gridsearch_report_values(right_path, right_implementation),
+        "Grid-search",
+        left_path,
+        right_path,
     )
-    jupyter_values = _gridsearch_values(jupyter)
 
-    if localize_values.keys() != jupyter_values.keys():
-        raise ValueError(
-            f"Grid-search candidates differ between {localize_path.name} and {jupyter_path.name}"
+
+def _compare_automl(
+    left_path: Path,
+    left_implementation: str,
+    right_path: Path,
+    right_implementation: str,
+) -> None:
+    _compare_values(
+        _automl_report_values(left_path, left_implementation),
+        _automl_report_values(right_path, right_implementation),
+        "AutoML",
+        left_path,
+        right_path,
+    )
+
+
+def _compare_reports(
+    left_path: Path,
+    right_path: Path,
+    implementation: str,
+) -> None:
+    left = load_report(left_path, implementation)
+    right = load_report(right_path, implementation)
+    if implementation == "localize":
+        left_grid = isinstance(
+            left.get("optimizer_data", {}).get("additional_data", {}).get("results"),
+            pd.DataFrame,
         )
-    for key in localize_values:
-        if not np.allclose(
-            localize_values[key], jupyter_values[key], rtol=1e-6, atol=1e-8, equal_nan=True
-        ):
-            raise ValueError(
-                f"Grid-search scores differ for parameters {key}: "
-                f"{localize_path.name} != {jupyter_path.name}"
-            )
-
-
-def _compare_automl(localize_path: Path, jupyter_path: Path) -> None:
-    localize = load_report(localize_path, "localize")["model_data"]["reports"][0]
-    jupyter = load_report(jupyter_path, "jupyter")[0]
-
-    if _parameter_key(localize["params"]) != _parameter_key(jupyter["params"]):
-        raise ValueError(
-            f"AutoML parameters differ between {localize_path.name} and {jupyter_path.name}"
+        right_grid = isinstance(
+            right.get("optimizer_data", {}).get("additional_data", {}).get("results"),
+            pd.DataFrame,
         )
+    else:
+        left_grid = isinstance(left, pd.DataFrame)
+        right_grid = isinstance(right, pd.DataFrame)
 
-    for metric in ("rmse", "r_squared"):
-        for statistic in ("mean", "std"):
-            localize_value = float(localize["scores"][metric][statistic])
-            jupyter_value = float(jupyter["scores"][metric][statistic])
-            if not np.isclose(
-                localize_value, jupyter_value, rtol=1e-6, atol=1e-8, equal_nan=True
-            ):
-                raise ValueError(
-                    f"AutoML {metric} {statistic} differs between "
-                    f"{localize_path.name} and {jupyter_path.name}"
-                )
+    if left_grid != right_grid:
+        raise ValueError(f"Report types differ between {left_path} and {right_path}")
+    compare = _compare_gridsearch if left_grid else _compare_automl
+    compare(left_path, implementation, right_path, implementation)
 
 
-def validate_benchmark_outputs(evaluation_dir: Path, runs: int) -> None:
+def _run_consistency(evaluation_dir: Path, runs: int) -> dict[str, object]:
+    results = {}
+    for implementation in ("localize", "jupyter", "kedro"):
+        failures = []
+        total = 0
+        reference_run = evaluation_dir / "benchmark" / implementation / "run-01"
+        reference_reports = {
+            str(path.relative_to(reference_run / "reports")): path
+            for path in report_paths(reference_run)
+        }
+
+        for run_number in range(2, runs + 1):
+            run = evaluation_dir / "benchmark" / implementation / f"run-{run_number:02d}"
+            reports = {
+                str(path.relative_to(run / "reports")): path
+                for path in report_paths(run)
+            }
+            for relative_path in sorted(reference_reports.keys() | reports.keys()):
+                total += 1
+                if relative_path not in reference_reports or relative_path not in reports:
+                    failures.append(
+                        {
+                            "reference_run": 1,
+                            "run": run_number,
+                            "report": relative_path,
+                            "error": "Report is missing from one run",
+                        }
+                    )
+                    continue
+                try:
+                    _compare_reports(
+                        reference_reports[relative_path],
+                        reports[relative_path],
+                        implementation,
+                    )
+                except (KeyError, TypeError, ValueError) as error:
+                    failures.append(
+                        {
+                            "reference_run": 1,
+                            "run": run_number,
+                            "report": relative_path,
+                            "error": str(error),
+                        }
+                    )
+
+        results[implementation] = {
+            "status": "warning" if failures else "passed",
+            "passed": total - len(failures),
+            "failed": len(failures),
+            "total": total,
+            "failures": failures,
+        }
+    return results
+
+
+def validate_benchmark_outputs(evaluation_dir: Path, runs: int) -> dict[str, object]:
+    failures = []
+    total = 0
+
     for run_number in range(1, runs + 1):
         localize_run = evaluation_dir / "benchmark" / "localize" / f"run-{run_number:02d}"
         jupyter_run = evaluation_dir / "benchmark" / "jupyter" / f"run-{run_number:02d}"
@@ -261,20 +388,74 @@ def validate_benchmark_outputs(evaluation_dir: Path, runs: int) -> None:
         for subset in SUBSETS:
             for split in SPLITS:
                 for model in GRIDSEARCH_MODELS:
-                    _compare_gridsearch(
-                        find_report(localize_run, f"{subset}-{model}-{split}Split-results.pkl"),
+                    total += 1
+                    try:
+                        _compare_gridsearch(
+                            find_report(
+                                localize_run,
+                                f"{subset}-{model}-{split}Split-results.pkl",
+                            ),
+                            "localize",
+                            find_report(
+                                jupyter_run,
+                                f"Results_{model}-{split}Split-{subset}Subset.pkl",
+                            ),
+                            "jupyter",
+                        )
+                    except ValueError as error:
+                        failures.append(
+                            {
+                                "run": run_number,
+                                "stage": "gridsearch",
+                                "subset": subset,
+                                "split": split,
+                                "model": model,
+                                "error": str(error),
+                            }
+                        )
+
+                total += 1
+                try:
+                    _compare_automl(
+                        find_report(
+                            localize_run,
+                            f"{subset}-ExampleModel-{split}Split-results.pkl",
+                        ),
+                        "localize",
                         find_report(
                             jupyter_run,
-                            f"Results_{model}-{split}Split-{subset}Subset.pkl",
+                            f"Results_ExampleModel-{split}Split-{subset}Subset.pkl",
                         ),
+                        "jupyter",
                     )
-                _compare_automl(
-                    find_report(localize_run, f"{subset}-ExampleModel-{split}Split-results.pkl"),
-                    find_report(
-                        jupyter_run,
-                        f"Results_ExampleModel-{split}Split-{subset}Subset.pkl",
-                    ),
-                )
+                except ValueError as error:
+                    failures.append(
+                        {
+                            "run": run_number,
+                            "stage": "automl",
+                            "subset": subset,
+                            "split": split,
+                            "model": "ExampleModel",
+                            "error": str(error),
+                        }
+                    )
+
+    run_consistency = _run_consistency(evaluation_dir, runs)
+    consistency_failures = sum(result["failed"] for result in run_consistency.values())
+
+    return {
+        "status": "warning" if failures or consistency_failures else "passed",
+        "structure": "passed",
+        "implementations": ["localize", "jupyter", "kedro"],
+        "runs": runs,
+        "localize_jupyter_comparisons": {
+            "passed": total - len(failures),
+            "failed": len(failures),
+            "total": total,
+            "failures": failures,
+        },
+        "run_consistency": run_consistency,
+    }
 
 
 def summarize_stage(run_dir: Path, stage: str) -> dict[str, object]:

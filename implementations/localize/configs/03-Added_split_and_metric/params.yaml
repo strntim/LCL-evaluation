@@ -1,6 +1,6 @@
 # 03-Initial
 evaluation:
-  metrics: {'rmse': False, 'r_squared': True}
+  metrics: {'rmse': false, 'r_squared': true}
   save_top_models: 0.1
   score_with: 'rmse'
 

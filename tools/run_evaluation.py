@@ -335,15 +335,31 @@ def main() -> int:
         else:
             run_sequential(session, args.runs)
 
-        validate_benchmark_outputs(session, args.runs)
+        benchmark_validation = validate_benchmark_outputs(session, args.runs)
         write_json(
             session / "validation.json",
             {
                 "validated": iso_time(),
-                "implementations": ["localize", "jupyter", "kedro"],
-                "runs": args.runs,
+                "status": benchmark_validation["status"],
+                "benchmark": benchmark_validation,
             },
         )
+        comparisons = benchmark_validation["localize_jupyter_comparisons"]
+        if comparisons["failed"]:
+            print(
+                "Validation warning: "
+                f"{comparisons['failed']} of {comparisons['total']} "
+                "LOCALIZE/Jupyter comparisons differ; see validation.json",
+                flush=True,
+            )
+        for implementation, consistency in benchmark_validation["run_consistency"].items():
+            if consistency["failed"]:
+                print(
+                    "Validation warning: "
+                    f"{consistency['failed']} of {consistency['total']} "
+                    f"{implementation} run-to-run comparisons differ; see validation.json",
+                    flush=True,
+                )
         write_json(session / "loc.json", calculate_loc_changes(ROOT))
         run_command(
             [

@@ -1,6 +1,6 @@
 # 00-Initial
 evaluation:
-  metrics: {'rmse': False}
+  metrics: {'rmse': false}
   save_top_models: 0.1
   score_with: 'rmse'
 
