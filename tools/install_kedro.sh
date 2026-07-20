@@ -15,7 +15,7 @@ if [[ $# -ne 0 ]]; then
     exit 1
 fi
 
-if ! mamba env list | awk '$1 == "kedro" { found = 1 } END { exit !found }'; then
+if ! mamba run -n kedro python -c "import sys" >/dev/null 2>&1; then
     echo "The kedro environment does not exist. Run tools/create_environments.sh first." >&2
     exit 1
 fi

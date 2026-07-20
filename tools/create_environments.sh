@@ -15,7 +15,7 @@ if [[ ! -f "${localize_environment}" ]]; then
 fi
 
 environment_exists() {
-    mamba env list | awk -v expected="$1" '$1 == expected { found = 1 } END { exit !found }'
+    mamba run -n "$1" python -c "import sys" >/dev/null 2>&1
 }
 
 create_environment() {
