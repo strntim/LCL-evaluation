@@ -485,12 +485,19 @@ def summarize_stage(run_dir: Path, stage: str) -> dict[str, object]:
     }
 
 
-def completed_runs(directory: Path, implementation: str) -> list[Path]:
-    runs = sorted(
-        path
-        for path in directory.glob("run-*")
-        if path.is_dir() and path.name.removeprefix("run-").isdigit()
-    )
+def completed_runs(
+    directory: Path,
+    implementation: str,
+    limit: int | None = None,
+) -> list[Path]:
+    if limit is None:
+        runs = sorted(
+            path
+            for path in directory.glob("run-*")
+            if path.is_dir() and path.name.removeprefix("run-").isdigit()
+        )
+    else:
+        runs = [directory / f"run-{run_number:02d}" for run_number in range(1, limit + 1)]
     if not runs:
         raise FileNotFoundError(f"No completed runs found: {directory}")
     for run in runs:
@@ -501,13 +508,18 @@ def completed_runs(directory: Path, implementation: str) -> list[Path]:
 def summarize_benchmark(
     evaluation_dir: Path,
     implementation_names: dict[str, str] | None = None,
+    runs: int | None = None,
 ) -> pd.DataFrame:
     implementation_names = implementation_names or IMPLEMENTATION_NAMES
     rows = []
     for implementation, display_name in implementation_names.items():
-        runs = completed_runs(evaluation_dir / "benchmark" / implementation, implementation)
+        implementation_runs = completed_runs(
+            evaluation_dir / "benchmark" / implementation,
+            implementation,
+            limit=runs,
+        )
         for stage in STAGES:
-            summaries = [summarize_stage(run, stage) for run in runs]
+            summaries = [summarize_stage(run, stage) for run in implementation_runs]
             memory = pd.concat(
                 [summary["memory"] for summary in summaries],
                 ignore_index=True,
@@ -521,7 +533,7 @@ def summarize_benchmark(
                 {
                     "implementation": display_name,
                     "stage": stage,
-                    "runs": len(runs),
+                    "runs": len(implementation_runs),
                     "wall_seconds": np.mean(
                         [float(summary["wall_seconds"]) for summary in summaries]
                     ),

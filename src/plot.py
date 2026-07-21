@@ -315,19 +315,22 @@ def plot_scalability_time(summary, figures: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--evaluation-dir")
+    parser.add_argument("--runs", type=int)
+    parser.add_argument("--benchmark-only", action="store_true")
     args = parser.parse_args()
     evaluation_dir = resolve_evaluation_dir(ROOT, args.evaluation_dir)
     figures = evaluation_dir / "figures"
 
-    benchmark = summarize_benchmark(evaluation_dir)
-    scalability = summarize_scalability(evaluation_dir)
+    benchmark = summarize_benchmark(evaluation_dir, runs=args.runs)
     loc = load_loc(evaluation_dir)
 
     plot_benchmark_memory(benchmark, figures)
     plot_benchmark_time(benchmark, figures)
     plot_loc(loc, figures)
-    plot_scalability_memory(scalability, figures)
-    plot_scalability_time(scalability, figures)
+    if not args.benchmark_only:
+        scalability = summarize_scalability(evaluation_dir)
+        plot_scalability_memory(scalability, figures)
+        plot_scalability_time(scalability, figures)
     print(f"Figures saved to {figures}")
 
 

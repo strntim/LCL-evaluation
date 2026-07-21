@@ -20,6 +20,7 @@ JUPYTER = ROOT / "implementations" / "jupyter"
 JUPYTER_BENCHMARK = JUPYTER / "results" / "artifacts" / "Benchmarking-results"
 KEDRO = ROOT / "implementations" / "kedro"
 KEDRO_BENCHMARK = KEDRO / "artifacts" / "Benchmarking"
+IMPLEMENTATIONS = ("localize", "jupyter", "kedro")
 
 sys.path.insert(0, str(SRC))
 
@@ -264,6 +265,118 @@ def create_session(args: argparse.Namespace) -> Path:
     return session
 
 
+def resolve_session(value: str) -> Path:
+    path = Path(value).expanduser()
+    candidates = [path] if path.is_absolute() else [ROOT / path, RESULTS / path]
+    for candidate in candidates:
+        if candidate.is_dir():
+            return candidate.resolve()
+    raise FileNotFoundError(f"Evaluation session not found: {value}")
+
+
+def expected_runs(session: Path, fallback: int) -> int:
+    metadata_path = session / "metadata.json"
+    if not metadata_path.is_file():
+        return fallback
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    return int(metadata.get("benchmark_runs", fallback))
+
+
+def available_runs(session: Path, expected: int) -> int:
+    from evaluation_data import validate_run
+
+    available = 0
+    for run_number in range(1, expected + 1):
+        for implementation in IMPLEMENTATIONS:
+            run = session / "benchmark" / implementation / f"run-{run_number:02d}"
+            if not (run / "complete.json").is_file():
+                return available
+            try:
+                validate_run(run, implementation)
+            except Exception as error:
+                print(f"Validation warning: {run} is invalid: {error}", flush=True)
+                return available
+        available = run_number
+    return available
+
+
+def has_scalability_results(session: Path) -> bool:
+    return all(completed(session / "scalability" / f"{factor}x", "localize") for factor in (1, 5, 10))
+
+
+def print_validation_warnings(validation: dict[str, object]) -> None:
+    if validation["partial"]:
+        message = (
+            "Validation warning: partial evaluation; analyzed "
+            f"{validation['available_runs']} of {validation['expected_runs']} benchmark runs"
+        )
+        if not validation["scalability_complete"]:
+            message += "; scalability results are incomplete"
+        print(message, flush=True)
+
+    benchmark = validation["benchmark"]
+    comparisons = benchmark["localize_jupyter_comparisons"]
+    if comparisons["failed"]:
+        print(
+            "Validation warning: "
+            f"{comparisons['failed']} of {comparisons['total']} "
+            "LOCALIZE/Jupyter comparisons differ; see validation.json",
+            flush=True,
+        )
+    for implementation, consistency in benchmark["run_consistency"].items():
+        if consistency["failed"]:
+            print(
+                "Validation warning: "
+                f"{consistency['failed']} of {consistency['total']} "
+                f"{implementation} run-to-run comparisons differ; see validation.json",
+                flush=True,
+            )
+
+
+def analyze_session(session: Path, runs: int, expected: int) -> None:
+    from CountLOC import calculate_loc_changes
+    from evaluation_data import validate_benchmark_outputs
+
+    scalability_complete = has_scalability_results(session)
+    partial = runs < expected or not scalability_complete
+    benchmark_validation = validate_benchmark_outputs(session, runs)
+    validation = {
+        "validated": iso_time(),
+        "status": "warning" if partial or benchmark_validation["status"] != "passed" else "passed",
+        "partial": partial,
+        "available_runs": runs,
+        "expected_runs": expected,
+        "scalability_complete": scalability_complete,
+        "benchmark": benchmark_validation,
+    }
+    write_json(session / "validation.json", validation)
+    print_validation_warnings(validation)
+    write_json(session / "loc.json", calculate_loc_changes(ROOT))
+
+    plot_command = [
+        sys.executable,
+        str(SRC / "plot.py"),
+        "--evaluation-dir",
+        str(session),
+        "--runs",
+        str(runs),
+    ]
+    if not scalability_complete:
+        plot_command.append("--benchmark-only")
+    run_command(plot_command)
+    run_command(
+        [
+            sys.executable,
+            str(SRC / "plot_experimental.py"),
+            "--evaluation-dir",
+            str(session),
+            "--runs",
+            str(runs),
+        ]
+    )
+    print(f"Evaluation analysis complete: {session}", flush=True)
+
+
 def update_metadata(session: Path, runs: int, status: str) -> None:
     path = session / "metadata.json"
     if path.is_file():
@@ -305,11 +418,10 @@ def print_dry_run(runs: int, parallel: bool, stagger_seconds: float) -> None:
 
 
 def main() -> int:
-    from CountLOC import calculate_loc_changes
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--runs", type=int, default=5)
     parser.add_argument("--resume")
+    parser.add_argument("--analyze", metavar="SESSION")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("-p", "--parallel", action="store_true")
     parser.add_argument("--stagger-seconds", type=float, default=5.0)
@@ -319,11 +431,19 @@ def main() -> int:
         parser.error("--runs must be at least 1")
     if args.stagger_seconds < 0:
         parser.error("--stagger-seconds cannot be negative")
+    if args.analyze:
+        if args.resume or args.dry_run or args.parallel:
+            parser.error("--analyze cannot be combined with --resume, --dry-run, or --parallel")
+        session = resolve_session(args.analyze)
+        expected = expected_runs(session, args.runs)
+        runs = available_runs(session, expected)
+        if runs == 0:
+            raise ValueError(f"No common completed benchmark runs found: {session}")
+        analyze_session(session, runs, expected)
+        return 0
     if args.dry_run:
         print_dry_run(args.runs, args.parallel, args.stagger_seconds)
         return 0
-
-    from evaluation_data import validate_benchmark_outputs
 
     session = create_session(args)
     print(f"Evaluation session: {session}", flush=True)
@@ -335,48 +455,7 @@ def main() -> int:
         else:
             run_sequential(session, args.runs)
 
-        benchmark_validation = validate_benchmark_outputs(session, args.runs)
-        write_json(
-            session / "validation.json",
-            {
-                "validated": iso_time(),
-                "status": benchmark_validation["status"],
-                "benchmark": benchmark_validation,
-            },
-        )
-        comparisons = benchmark_validation["localize_jupyter_comparisons"]
-        if comparisons["failed"]:
-            print(
-                "Validation warning: "
-                f"{comparisons['failed']} of {comparisons['total']} "
-                "LOCALIZE/Jupyter comparisons differ; see validation.json",
-                flush=True,
-            )
-        for implementation, consistency in benchmark_validation["run_consistency"].items():
-            if consistency["failed"]:
-                print(
-                    "Validation warning: "
-                    f"{consistency['failed']} of {consistency['total']} "
-                    f"{implementation} run-to-run comparisons differ; see validation.json",
-                    flush=True,
-                )
-        write_json(session / "loc.json", calculate_loc_changes(ROOT))
-        run_command(
-            [
-                sys.executable,
-                str(SRC / "plot.py"),
-                "--evaluation-dir",
-                str(session),
-            ]
-        )
-        run_command(
-            [
-                sys.executable,
-                str(SRC / "plot_experimental.py"),
-                "--evaluation-dir",
-                str(session),
-            ]
-        )
+        analyze_session(session, args.runs, args.runs)
     except BaseException:
         update_metadata(session, args.runs, "incomplete")
         raise

@@ -202,11 +202,16 @@ def plot_loc(loc, figures: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--evaluation-dir")
+    parser.add_argument("--runs", type=int)
     args = parser.parse_args()
     evaluation_dir = resolve_evaluation_dir(ROOT, args.evaluation_dir)
     figures = evaluation_dir / "figures-experimental"
 
-    benchmark = summarize_benchmark(evaluation_dir, EXPERIMENTAL_IMPLEMENTATION_NAMES)
+    benchmark = summarize_benchmark(
+        evaluation_dir,
+        EXPERIMENTAL_IMPLEMENTATION_NAMES,
+        runs=args.runs,
+    )
     loc = load_loc(evaluation_dir)
     plot_benchmark_memory(benchmark, figures)
     plot_benchmark_time(benchmark, figures)
