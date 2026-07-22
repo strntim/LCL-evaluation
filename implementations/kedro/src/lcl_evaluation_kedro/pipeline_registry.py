@@ -25,6 +25,6 @@ def register_pipelines() -> dict[str, Pipeline]:
         "02-Changed_dataset_to_logatec": create_v02_changed_dataset_to_logatec_pipeline(),
         "03-Added_split_and_metric": create_v03_added_split_and_metric_pipeline(),
         "04-Added_automl_model": automl,
-        "Benchmarking": create_v04_added_automl_model_pipeline(),
+        "Benchmarking": automl,
         "__default__": automl,
     }

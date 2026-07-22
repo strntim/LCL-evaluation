@@ -1,5 +1,4 @@
 dataset:
-  kind: logatec
   subsets: [spring, winter]
 
 splitters:

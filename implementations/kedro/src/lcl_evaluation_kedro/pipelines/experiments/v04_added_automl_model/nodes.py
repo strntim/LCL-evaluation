@@ -1,5 +1,4 @@
 import gc
-import math
 import os
 import re
 import shutil
@@ -14,86 +13,49 @@ import pandas as pd
 
 
 def _materialize(partitions: Mapping[str, Any]) -> dict[str, Any]:
-    return {
-        partition: value() if callable(value) else value
-        for partition, value in partitions.items()
-    }
+    return {partition: load() for partition, load in partitions.items()}
 
 
-def _prepare_umu(frame: pd.DataFrame) -> pd.DataFrame:
-    columns = [
-        "Column7",
-        "Column8",
-        "Column14",
-        "Column15",
-        "Column42",
-        "Column43",
-        "Column45",
-        "Column46",
-        "Column47",
-        "Column48",
-        "Column87",
-        "Column88",
-        "Column78",
-        "Column79",
-    ]
-    frame = frame.loc[:, columns].copy()
-    frame.columns = frame.iloc[0]
-    frame = frame.iloc[1:].copy()
-    for column in frame.columns:
-        if frame[column].dtype == "object":
-            frame[column] = pd.to_numeric(frame[column], errors="coerce")
-    frame.columns = [str(column).replace("nas_value_nr5g_", "") for column in frame.columns]
-    frame = frame.dropna()
-    frame = frame.loc[:, frame.nunique() > 1]
-    return frame
-
-
-def _prepare_logatec(raw: dict[str, Any]) -> pd.DataFrame:
-    rows = []
-    for position, measurements in raw.items():
-        location = tuple(int(value) for value in re.findall(r"\d+", position))
-        if len(location) == 1:
-            location = (3, *location)
-        if len(location) != 2:
-            raise ValueError(f"Invalid LOG-a-TEC position: {position}")
-        pos_x, pos_y = location
-        for device_id, samples in measurements.items():
-            for sample in samples:
-                rows.append(
-                    {
-                        "pos_x": pos_x,
-                        "pos_y": pos_y,
-                        "node": int(device_id),
-                        "timestamp": sample["timestamp"],
-                        "value": sample["rss"],
-                    }
-                )
-
-    frame = pd.DataFrame(rows)
-    frame["timestamp"] = pd.to_datetime(frame["timestamp"], unit="s", origin="unix").astype("datetime64[s]")
-    frame = frame.astype({"pos_x": "uint8", "pos_y": "uint8", "value": "int8", "node": "uint8"})
-    frame = (
-        frame.groupby(["pos_x", "pos_y", "node", "timestamp"], as_index=False)["value"]
-        .mean()
-        .pivot(index=["timestamp", "pos_x", "pos_y"], columns="node", values="value")
-        .reset_index()
-    )
-    frame.columns = [
-        f"node{column}" if isinstance(column, (int, np.integer)) else str(column)
-        for column in frame.columns
-    ]
-    return frame.fillna(-180).drop(columns="timestamp")
-
-
-def prepare(raw_data: Any, dataset: dict[str, Any]) -> dict[str, pd.DataFrame]:
-    if dataset["kind"] == "umu":
-        return {"umu": _prepare_umu(raw_data)}
+def prepare(
+    raw_data: Mapping[str, Any], dataset: dict[str, Any]
+) -> dict[str, pd.DataFrame]:
     raw_partitions = _materialize(raw_data)
-    return {
-        subset: _prepare_logatec(raw_partitions[subset])
-        for subset in dataset["subsets"]
-    }
+    prepared = {}
+    for subset in dataset["subsets"]:
+        rows = []
+        for position, measurements in raw_partitions[subset].items():
+            location = tuple(int(value) for value in re.findall(r"\d+", position))
+            if len(location) == 1:
+                location = (3, *location)
+            assert len(location) == 2, f"location identifier is not length 2: {location}"
+            pos_x, pos_y = location
+            for device_id, samples in measurements.items():
+                for sample in samples:
+                    rows.append(
+                        {
+                            "pos_x": pos_x,
+                            "pos_y": pos_y,
+                            "node": int(device_id),
+                            "timestamp": sample["timestamp"],
+                            "value": sample["rss"],
+                        }
+                    )
+
+        frame = pd.DataFrame(rows)
+        frame["timestamp"] = pd.to_datetime(frame["timestamp"], unit="s", origin="unix").astype("datetime64[s]")
+        frame = frame.astype({"pos_x": "uint8", "pos_y": "uint8", "value": "int8", "node": "uint8"})
+        frame = (
+            frame.groupby(["pos_x", "pos_y", "node", "timestamp"], as_index=False)["value"]
+            .mean()
+            .pivot(index=["timestamp", "pos_x", "pos_y"], columns="node", values="value")
+            .reset_index()
+        )
+        frame.columns = [
+            f"node{column}" if isinstance(column, (int, np.integer)) else str(column)
+            for column in frame.columns
+        ]
+        prepared[subset] = frame.fillna(-180).drop(columns="timestamp")
+    return prepared
 
 
 def featurize(
@@ -104,21 +66,9 @@ def featurize(
     targets = {}
     for subset in dataset["subsets"]:
         frame = prepared[subset].copy()
-        if dataset["kind"] == "umu":
-            origin_lat = frame["gpsd_tpv_lat"].min()
-            origin_lon = frame["gpsd_tpv_lon"].min()
-            radius = 6_378_137
-            frame["target_x"] = np.radians(frame["gpsd_tpv_lat"] - origin_lat) * radius
-            frame["target_y"] = (
-                np.radians(frame["gpsd_tpv_lon"] - origin_lon)
-                * radius
-                * math.cos(math.radians(origin_lat))
-            )
-            frame = frame.drop(columns=["gpsd_tpv_lat", "gpsd_tpv_lon"])
-        else:
-            frame["pos_x"] = (frame["pos_x"] - 1) * 1.2
-            frame["pos_y"] = (frame["pos_y"] - 1) * 1.2
-            frame = frame.rename(columns={"pos_x": "target_x", "pos_y": "target_y"})
+        frame["pos_x"] = (frame["pos_x"] - 1) * 1.2
+        frame["pos_y"] = (frame["pos_y"] - 1) * 1.2
+        frame = frame.rename(columns={"pos_x": "target_x", "pos_y": "target_y"})
 
         target_columns = ["target_x", "target_y"]
         features[subset] = frame.drop(columns=target_columns)
@@ -186,7 +136,7 @@ def grid_search(
         for split_name in splitters:
             for model_name, settings in models.items():
                 print(f"Grid search: {subset} / {split_name} / {model_name}", flush=True)
-                estimator = _load_class(settings["class"])(**settings.get("parameters", {}))
+                estimator = _load_class(settings["class"])(**settings["parameters"])
                 search = GridSearchCV(
                     estimator=estimator,
                     param_grid=settings["grid"],
@@ -201,13 +151,6 @@ def grid_search(
                 best_models[key] = search.best_estimator_
                 results[f"{key}-results"] = pd.DataFrame(search.cv_results_)
     return best_models, results
-
-
-def _prediction_matrix(predictions: Any) -> np.ndarray:
-    if isinstance(predictions, list):
-        return np.column_stack([np.asarray(value).reshape(-1) for value in predictions])
-    matrix = np.asarray(predictions)
-    return matrix.reshape(len(matrix), -1)
 
 
 def _automl_candidate(
@@ -301,8 +244,9 @@ def _automl_candidate(
             fit_times.append(time.perf_counter() - started)
 
             started = time.perf_counter()
-            predictions = _prediction_matrix(
-                model.predict([x[test_indices]], batch_size=32, verbose=settings["verbose"])
+            predictions = np.squeeze(
+                np.stack(model.predict([x[test_indices]], batch_size=32, verbose=settings["verbose"]), axis=0),
+                axis=-1,
             )
             score_times.append(time.perf_counter() - started)
             expected = y[test_indices]
@@ -330,7 +274,7 @@ def _automl_candidate(
             }
         )
 
-    shutil.rmtree(directory / project_name, ignore_errors=True)
+    shutil.rmtree(directory / project_name)
     keras.backend.clear_session()
     gc.collect()
     return reports

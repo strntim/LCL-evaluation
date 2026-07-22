@@ -1,5 +1,4 @@
 dataset:
-  kind: logatec
   subsets: [spring, winter]
 
 splitters:
@@ -38,4 +37,3 @@ evaluation:
   metrics: [rmse, r_squared]
   refit: rmse
   workers: 5
-

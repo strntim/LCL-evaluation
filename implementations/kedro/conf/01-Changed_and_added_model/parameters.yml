@@ -1,5 +1,4 @@
 dataset:
-  kind: umu
   subsets: [umu]
 
 splitters:
@@ -33,4 +32,3 @@ evaluation:
   metrics: [rmse]
   refit: rmse
   workers: 5
-

@@ -1,5 +1,4 @@
 dataset:
-  kind: logatec
   subsets: [spring, winter]
 
 splitters:
@@ -49,4 +48,3 @@ automl:
   patience: 10
   min_delta: 0.0001
   verbose: 2
-

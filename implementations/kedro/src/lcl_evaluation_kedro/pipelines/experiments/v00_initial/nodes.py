@@ -8,10 +8,7 @@ import pandas as pd
 
 
 def _materialize(partitions: Mapping[str, Any]) -> dict[str, Any]:
-    return {
-        partition: value() if callable(value) else value
-        for partition, value in partitions.items()
-    }
+    return {partition: load() for partition, load in partitions.items()}
 
 
 def prepare(raw_data: pd.DataFrame, dataset: dict[str, Any]) -> dict[str, pd.DataFrame]:
@@ -124,7 +121,7 @@ def grid_search(
         for split_name in splitters:
             for model_name, settings in models.items():
                 print(f"Grid search: {subset} / {split_name} / {model_name}", flush=True)
-                estimator = _load_class(settings["class"])(**settings.get("parameters", {}))
+                estimator = _load_class(settings["class"])(**settings["parameters"])
                 search = GridSearchCV(
                     estimator=estimator,
                     param_grid=settings["grid"],
