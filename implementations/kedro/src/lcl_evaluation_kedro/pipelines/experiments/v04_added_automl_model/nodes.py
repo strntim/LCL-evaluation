@@ -241,9 +241,10 @@ def _automl_candidate(
             fit_times.append(time.perf_counter() - started)
 
             started = time.perf_counter()
-            predictions = np.squeeze(
-                np.stack(model.predict([x[test_indices]], batch_size=32, verbose=settings["verbose"]), axis=0),
-                axis=-1,
+            predictions = np.column_stack(
+                model.predict(
+                    [x[test_indices]], batch_size=32, verbose=settings["verbose"]
+                )
             )
             score_times.append(time.perf_counter() - started)
             expected = y[test_indices]
