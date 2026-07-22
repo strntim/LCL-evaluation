@@ -43,16 +43,85 @@ def save_figure(fig: plt.Figure, directory: Path, filename: str) -> None:
     plt.close(fig)
 
 
-def label_center(ax: plt.Axes, bars, fmt: str = "%.0f", fontsize: int = 8) -> None:
-    labels = ax.bar_label(bars, label_type="center", fmt=fmt, fontsize=fontsize)
+def style_labels(labels) -> None:
     for label in labels:
         label.set_path_effects(
             [path_effects.Stroke(linewidth=2, foreground="white"), path_effects.Normal()]
         )
+        label.set_zorder(10)
+
+
+def label_center(ax: plt.Axes, bars, fmt: str = "%.0f", fontsize: int = 8) -> None:
+    labels = ax.bar_label(bars, label_type="center", fmt=fmt, fontsize=fontsize)
+    style_labels(labels)
+
+
+def label_loc(
+    ax: plt.Axes,
+    bars,
+    fontsize: int = 7,
+    deleted: bool = False,
+) -> None:
+    values = [bar.get_height() for bar in bars]
+    centered = [f"{value:.0f}" if abs(value) >= 10 else "" for value in values]
+    outside = [f"{value:.0f}" if 0 < abs(value) < 10 else "" for value in values]
+    style_labels(
+        ax.bar_label(
+            bars,
+            labels=centered,
+            label_type="center",
+            fontsize=fontsize,
+        )
+    )
+    style_labels(
+        ax.bar_label(
+            bars,
+            labels=outside,
+            label_type="edge",
+            fontsize=fontsize,
+            padding=2,
+        )
+    )
+    if deleted:
+        zero_labels = [
+            ax.annotate(
+                "-0",
+                xy=(bar.get_x() + bar.get_width() / 2, 0),
+                xytext=(0, -2),
+                textcoords="offset points",
+                ha="center",
+                va="top",
+                fontsize=fontsize,
+            )
+            for bar, value in zip(bars, values)
+            if value == 0
+        ]
+        style_labels(zero_labels)
+
+
+def add_distribution(
+    ax: plt.Axes,
+    x: float,
+    mean: float,
+    q1: float,
+    q3: float,
+    maximum: float,
+) -> None:
+    ax.errorbar(
+        x,
+        mean,
+        yerr=[[max(mean - q1, 0)], [max(q3 - mean, 0)]],
+        fmt="none",
+        ecolor="black",
+        capsize=3,
+        linewidth=1.2,
+    )
+    ax.vlines(x, mean, maximum, linestyles=":", colors="black", linewidth=1)
+    ax.scatter(x, maximum, marker="_", s=40, color="black", zorder=3)
 
 
 def plot_benchmark_memory(summary, figures: Path) -> None:
-    fig, ax = plt.subplots(figsize=(7, 4.8), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
     group_width = 0.9
     bar_width = group_width / len(STAGES)
 
@@ -77,17 +146,7 @@ def plot_benchmark_memory(summary, figures: Path) -> None:
                 edgecolor="black",
             )
             label_center(ax, bars)
-            ax.errorbar(
-                x,
-                mean,
-                yerr=[[max(mean - q1, 0)], [max(q3 - mean, 0)]],
-                fmt="none",
-                ecolor="black",
-                capsize=3,
-                linewidth=1.5,
-            )
-            ax.vlines(x, mean, maximum, linestyles=":", colors="black", linewidth=1)
-            ax.scatter(x, maximum, marker="_", s=45, color="black", zorder=3)
+            add_distribution(ax, x, mean, q1, q3, maximum)
 
     ax.set_xticks(range(len(IMPLEMENTATIONS)), IMPLEMENTATIONS)
     ax.set_ylabel("Memory usage [MB]")
@@ -112,7 +171,7 @@ def plot_benchmark_memory(summary, figures: Path) -> None:
 
 
 def plot_benchmark_time(summary, figures: Path) -> None:
-    fig, axes = plt.subplots(2, 3, figsize=(8, 5.6), constrained_layout=True)
+    fig, axes = plt.subplots(2, 3, figsize=(9, 5.6), constrained_layout=True)
     axes = axes.flatten()
     bar_width = 0.36
 
@@ -138,8 +197,26 @@ def plot_benchmark_time(summary, figures: Path) -> None:
             hatch="//",
             alpha=0.65,
         )
-        ax.bar_label(cpu_bars, fmt="%.1f", fontsize=7, padding=2)
-        ax.bar_label(wall_bars, fmt="%.1f", fontsize=7, padding=2)
+        label_center(ax, cpu_bars, fmt="%.1f", fontsize=7)
+        label_center(ax, wall_bars, fmt="%.1f", fontsize=7)
+        for index, implementation in enumerate(IMPLEMENTATIONS):
+            row = rows.loc[implementation]
+            add_distribution(
+                ax,
+                positions[index] - bar_width / 2,
+                row["core_seconds"],
+                row["core_q1_seconds"],
+                row["core_q3_seconds"],
+                row["core_max_seconds"],
+            )
+            add_distribution(
+                ax,
+                positions[index] + bar_width / 2,
+                row["wall_seconds"],
+                row["wall_q1_seconds"],
+                row["wall_q3_seconds"],
+                row["wall_max_seconds"],
+            )
         ax.set_xticks(positions, IMPLEMENTATIONS, fontsize=8)
         ax.set_title(STAGE_NAMES[stage])
         ax.set_axisbelow(True)
@@ -158,47 +235,39 @@ def plot_benchmark_time(summary, figures: Path) -> None:
 
 
 def plot_loc(loc, figures: Path) -> None:
+    implementations = (
+        ("localize", "LOCALIZE", "green", "red", "--", "||"),
+        ("notebook", "Notebook", "lightgreen", "salmon", "//", "\\"),
+        ("kedro", "Kedro", "cornflowerblue", "lightskyblue", "xx", ".."),
+    )
     x = np.arange(len(loc))
-    width = 0.36
-    fig, ax = plt.subplots(figsize=(6.2, 4.3), constrained_layout=True)
-    localize_added = ax.bar(
-        x - width / 2,
-        loc["localize_added"],
-        width,
-        color="green",
-        edgecolor="black",
-        hatch="--",
-        label="LOCALIZE added",
-    )
-    localize_deleted = ax.bar(
-        x - width / 2,
-        -loc["localize_deleted"],
-        width,
-        color="red",
-        edgecolor="black",
-        hatch="||",
-        label="LOCALIZE deleted",
-    )
-    notebook_added = ax.bar(
-        x + width / 2,
-        loc["notebook_added"],
-        width,
-        color="lightgreen",
-        edgecolor="black",
-        hatch="//",
-        label="Notebook added",
-    )
-    notebook_deleted = ax.bar(
-        x + width / 2,
-        -loc["notebook_deleted"],
-        width,
-        color="salmon",
-        edgecolor="black",
-        hatch="\\",
-        label="Notebook deleted",
-    )
-    for bars in (localize_added, localize_deleted, notebook_added, notebook_deleted):
-        label_center(ax, bars)
+    width = 0.25
+    fig, ax = plt.subplots(figsize=(7.5, 4.6), constrained_layout=True)
+
+    for index, (key, label, added_color, deleted_color, added_hatch, deleted_hatch) in enumerate(
+        implementations
+    ):
+        position = x + (index - 1) * width
+        added = ax.bar(
+            position,
+            loc[f"{key}_added"],
+            width,
+            color=added_color,
+            edgecolor="black",
+            hatch=added_hatch,
+            label=f"{label} added",
+        )
+        deleted = ax.bar(
+            position,
+            -loc[f"{key}_deleted"],
+            width,
+            color=deleted_color,
+            edgecolor="black",
+            hatch=deleted_hatch,
+            label=f"{label} deleted",
+        )
+        label_loc(ax, added)
+        label_loc(ax, deleted, deleted=True)
 
     ax.axhline(0, color="black", linewidth=0.8)
     ax.set_xticks(x, [f"Change {index}" for index in loc["change"]])
@@ -206,7 +275,7 @@ def plot_loc(loc, figures: Path) -> None:
     ax.set_title("Lines added and removed per experiment change")
     ax.set_axisbelow(True)
     ax.grid(axis="y", linestyle=":", linewidth=0.5)
-    ax.legend(ncols=2, fontsize=8)
+    ax.legend(ncols=3, fontsize=7)
     save_figure(fig, figures, "LOCchanged.png")
 
 

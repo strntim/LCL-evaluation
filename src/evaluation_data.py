@@ -14,9 +14,9 @@ STAGE_NAMES = {
     "gridsearch": "Grid-search",
     "automl": "AutoML",
 }
-IMPLEMENTATION_NAMES = {"localize": "LOCALIZE", "jupyter": "Notebook"}
-EXPERIMENTAL_IMPLEMENTATION_NAMES = {
-    **IMPLEMENTATION_NAMES,
+IMPLEMENTATION_NAMES = {
+    "localize": "LOCALIZE",
+    "jupyter": "Notebook",
     "kedro": "Kedro",
 }
 EXPECTED_USAGE_COUNTS = {
@@ -520,6 +520,12 @@ def summarize_benchmark(
         )
         for stage in STAGES:
             summaries = [summarize_stage(run, stage) for run in implementation_runs]
+            wall = pd.Series(
+                [float(summary["wall_seconds"]) for summary in summaries]
+            )
+            core = pd.Series(
+                [float(summary["core_seconds"]) for summary in summaries]
+            )
             memory = pd.concat(
                 [summary["memory"] for summary in summaries],
                 ignore_index=True,
@@ -534,12 +540,14 @@ def summarize_benchmark(
                     "implementation": display_name,
                     "stage": stage,
                     "runs": len(implementation_runs),
-                    "wall_seconds": np.mean(
-                        [float(summary["wall_seconds"]) for summary in summaries]
-                    ),
-                    "core_seconds": np.mean(
-                        [float(summary["core_seconds"]) for summary in summaries]
-                    ),
+                    "wall_seconds": wall.mean(),
+                    "wall_q1_seconds": wall.quantile(0.25),
+                    "wall_q3_seconds": wall.quantile(0.75),
+                    "wall_max_seconds": wall.max(),
+                    "core_seconds": core.mean(),
+                    "core_q1_seconds": core.quantile(0.25),
+                    "core_q3_seconds": core.quantile(0.75),
+                    "core_max_seconds": core.max(),
                     "memory_mean_mb": memory.mean(),
                     "memory_q1_mb": memory.quantile(0.25),
                     "memory_q3_mb": memory.quantile(0.75),

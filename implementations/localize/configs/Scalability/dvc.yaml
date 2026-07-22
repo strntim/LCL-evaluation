@@ -10,32 +10,32 @@ vars:
   - subsets: [winter, spring]
 
 stages:
-  prepare:
+  scale:
     matrix:
       subset: ${subsets}
     cmd: |
       unzip -o -j ${path.data}/raw/logatec.zip ${item.subset}_data.json -d ${path.data}/raw/
-      python ${path.benchmarking}/wrapper.py --output ${path.reports}/usage/prepare-${item.subset}_usage.pkl -- python ${path.scripts}/prepare.py --method average --input ${path.data}/raw/${item.subset}_data.json --output ${path.data}/base/${item.subset}.pkl
+      python ${path.benchmarking}/scale.py --factor "$SCALE_FACTOR" --input ${path.data}/raw/${item.subset}_data.json --output ${path.data}/raw/${item.subset}_data_scaled.json
       rm ${path.data}/raw/${item.subset}_data.json
+    deps:
+      - ${path.benchmarking}/scale.py
+      - ${path.data}/raw/logatec.zip
+    outs:
+      - ${path.data}/raw/${item.subset}_data_scaled.json
+
+  prepare:
+    matrix:
+      subset: ${subsets}
+    cmd: >
+      python ${path.benchmarking}/wrapper.py --output ${path.reports}/usage/prepare-${item.subset}_usage.pkl -- python ${path.scripts}/prepare.py
+      --method average
+      --input ${path.data}/raw/${item.subset}_data_scaled.json
+      --output ${path.data}/interim/${item.subset}.pkl
     deps:
       - ${path.scripts}/prepare.py
       - ${path.benchmarking}/wrapper.py
       - ${path.benchmarking}/performance.py
-      - ${path.data}/raw/logatec.zip
-    outs:
-      - ${path.data}/base/${item.subset}.pkl
-
-  scale:
-    matrix:
-      subset: ${subsets}
-    cmd: >
-      python ${path.benchmarking}/scale.py
-      --factor "$SCALE_FACTOR"
-      --input ${path.data}/base/${item.subset}.pkl
-      --output ${path.data}/interim/${item.subset}.pkl
-    deps:
-      - ${path.benchmarking}/scale.py
-      - ${path.data}/base/${item.subset}.pkl
+      - ${path.data}/raw/${item.subset}_data_scaled.json
     outs:
       - ${path.data}/interim/${item.subset}.pkl
 

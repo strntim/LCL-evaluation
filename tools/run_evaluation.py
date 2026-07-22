@@ -364,16 +364,6 @@ def analyze_session(session: Path, runs: int, expected: int) -> None:
     if not scalability_complete:
         plot_command.append("--benchmark-only")
     run_command(plot_command)
-    run_command(
-        [
-            sys.executable,
-            str(SRC / "plot_experimental.py"),
-            "--evaluation-dir",
-            str(session),
-            "--runs",
-            str(runs),
-        ]
-    )
     print(f"Evaluation analysis complete: {session}", flush=True)
 
 
@@ -414,7 +404,6 @@ def print_dry_run(runs: int, parallel: bool, stagger_seconds: float) -> None:
     print("validate LOCALIZE, Jupyter, and Kedro results")
     print("calculate loc.json")
     print("generate paper figures")
-    print("generate experimental Kedro figures")
 
 
 def main() -> int:
