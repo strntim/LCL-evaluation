@@ -69,7 +69,6 @@ def featurize(
         frame["pos_x"] = (frame["pos_x"] - 1) * 1.2
         frame["pos_y"] = (frame["pos_y"] - 1) * 1.2
         frame = frame.rename(columns={"pos_x": "target_x", "pos_y": "target_y"})
-
         target_columns = ["target_x", "target_y"]
         features[subset] = frame.drop(columns=target_columns)
         targets[subset] = frame[target_columns]
@@ -91,8 +90,7 @@ def create_splits(
         for name, settings in splitters.items():
             options = dict(settings)
             splitter_type = options.pop("type")
-            splitter_class = getattr(model_selection, splitter_type)
-            splitter = splitter_class(**options)
+            splitter = getattr(model_selection, splitter_type)(**options)
             results[f"{subset}/{name}"] = list(
                 splitter.split(feature_partitions[subset], target_partitions[subset])
             )
@@ -131,7 +129,6 @@ def grid_search(
     scorers = _scorers(evaluation["metrics"])
     best_models = {}
     results = {}
-
     for subset in dataset["subsets"]:
         for split_name in splitters:
             for model_name, settings in models.items():
