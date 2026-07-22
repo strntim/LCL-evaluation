@@ -13,11 +13,11 @@ EXPERIMENTS = (
     "04-Added_automl_model",
 )
 KEDRO_SNAPSHOTS = (
-    "initial",
-    "changed_model",
-    "changed_dataset",
-    "split_metric",
-    "automl",
+    "v00_initial",
+    "v01_changed_and_added_model",
+    "v02_changed_dataset_to_logatec",
+    "v03_added_split_and_metric",
+    "v04_added_automl_model",
 )
 
 

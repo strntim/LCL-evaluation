@@ -41,11 +41,12 @@ def _prepare_umu(frame: pd.DataFrame) -> pd.DataFrame:
     frame.columns = frame.iloc[0]
     frame = frame.iloc[1:].copy()
     for column in frame.columns:
-        frame[column] = pd.to_numeric(frame[column], errors="coerce")
+        if frame[column].dtype == "object":
+            frame[column] = pd.to_numeric(frame[column], errors="coerce")
     frame.columns = [str(column).replace("nas_value_nr5g_", "") for column in frame.columns]
     frame = frame.dropna()
     frame = frame.loc[:, frame.nunique() > 1]
-    return frame.reset_index(drop=True)
+    return frame
 
 
 def _prepare_logatec(raw: dict[str, Any]) -> pd.DataFrame:
@@ -70,7 +71,7 @@ def _prepare_logatec(raw: dict[str, Any]) -> pd.DataFrame:
                 )
 
     frame = pd.DataFrame(rows)
-    frame["timestamp"] = pd.to_datetime(frame["timestamp"], unit="s", origin="unix")
+    frame["timestamp"] = pd.to_datetime(frame["timestamp"], unit="s", origin="unix").astype("datetime64[s]")
     frame = frame.astype({"pos_x": "uint8", "pos_y": "uint8", "value": "int8", "node": "uint8"})
     frame = (
         frame.groupby(["pos_x", "pos_y", "node", "timestamp"], as_index=False)["value"]

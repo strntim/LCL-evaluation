@@ -35,11 +35,12 @@ def prepare(raw_data: pd.DataFrame, dataset: dict[str, Any]) -> dict[str, pd.Dat
     frame.columns = frame.iloc[0]
     frame = frame.iloc[1:].copy()
     for column in frame.columns:
-        frame[column] = pd.to_numeric(frame[column], errors="coerce")
+        if frame[column].dtype == "object":
+            frame[column] = pd.to_numeric(frame[column], errors="coerce")
     frame.columns = [str(column).replace("nas_value_nr5g_", "") for column in frame.columns]
     frame = frame.dropna()
     frame = frame.loc[:, frame.nunique() > 1]
-    return {dataset["subsets"][0]: frame.reset_index(drop=True)}
+    return {dataset["subsets"][0]: frame}
 
 
 def featurize(
@@ -138,4 +139,3 @@ def grid_search(
                 best_models[key] = search.best_estimator_
                 results[f"{key}-results"] = pd.DataFrame(search.cv_results_)
     return best_models, results
-
