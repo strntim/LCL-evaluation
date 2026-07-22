@@ -68,8 +68,11 @@ def _sample_once(root, exclude_pids: set[int]=frozenset()):
         if p.pid in exclude_pids:
             continue
         if p.pid not in cache:
-            cache[p.pid] = p
-            p.cpu_percent(None)          # prime – first call always 0.0
+            try:
+                p.cpu_percent(None)      # prime – first call always 0.0
+                cache[p.pid] = p
+            except (psutil.NoSuchProcess, psutil.ZombieProcess):
+                continue
 
     total_cpu = 0.0
     total_mem = 0
