@@ -253,7 +253,7 @@ def _compare_values(
     mismatches = [
         key
         for key in left
-        if not np.allclose(left[key], right[key], rtol=1e-6, atol=1e-8, equal_nan=True)
+        if not np.array_equal(left[key], right[key], equal_nan=True)
     ]
     if mismatches:
         raise ValueError(
