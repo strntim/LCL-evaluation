@@ -36,7 +36,7 @@ models:
 evaluation:
   metrics: [rmse, r_squared]
   refit: rmse
-  workers: 5
+  workers: -1
 
 automl:
   directory: ${globals:artifact_path}/automl

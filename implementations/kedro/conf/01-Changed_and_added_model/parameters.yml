@@ -31,4 +31,4 @@ models:
 evaluation:
   metrics: [rmse]
   refit: rmse
-  workers: 5
+  workers: -1

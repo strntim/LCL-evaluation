@@ -1,9 +1,6 @@
 name: kedro
 
 channels:
-  - pytorch
-  - nvidia
-  - anaconda
   - conda-forge
   - nodefaults
 
@@ -14,12 +11,8 @@ dependencies:
 
   - nodejs=18.18.2
 
-  - pytorch=2.2.2
-  - torchvision=0.17.2
-  - skorch=0.15.0
-
   - numpy=1.26.4
-  - scipy=1.15.3
+  - scipy=1.15.2
   - matplotlib=3.8.4
   - scikit-learn=1.4.2
   - pandas=2.1.4
@@ -39,7 +32,6 @@ dependencies:
   - dvc=3.67.1
   - conda-forge::pycares=4.10.0
 
-  - multiprocess
   - kedro=1.5.0
 
   - pip:
@@ -48,10 +40,6 @@ dependencies:
       - seaborn==0.13.2
       - Pillow~=11.0.0
       - openpyxl
-      - lightning~=2.2
-      - lightning-bolts
-      - torch-metrics
-      - torchinfo
       - pre-commit
       - ruff
       - SciencePlots~=2.1

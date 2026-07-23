@@ -41,6 +41,12 @@ GRIDSEARCH_RESULT_COLUMNS = (
     "mean_test_r_squared",
     "std_test_r_squared",
 )
+GRIDSEARCH_FOLD_COLUMNS = tuple(
+    f"split{fold}_test_{metric}"
+    for fold in range(5)
+    for metric in ("rmse", "r_squared")
+)
+GRIDSEARCH_SCORE_COLUMNS = (*GRIDSEARCH_FOLD_COLUMNS, *GRIDSEARCH_RESULT_COLUMNS)
 
 
 def resolve_evaluation_dir(root: Path, value: str | Path | None = None) -> Path:
@@ -102,14 +108,14 @@ def load_report(path: Path, implementation: str):
     if implementation in {"jupyter", "kedro"}:
         label = "Notebook" if implementation == "jupyter" else "Kedro"
         if isinstance(report, pd.DataFrame):
-            required = {"params", *GRIDSEARCH_RESULT_COLUMNS}
+            required = {"params", *GRIDSEARCH_SCORE_COLUMNS}
             missing = required.difference(report.columns)
             if missing:
                 raise ValueError(f"{label} grid-search report is missing {sorted(missing)}: {path}")
             if report.empty:
                 raise ValueError(f"{label} grid-search report is empty: {path}")
             if implementation == "kedro":
-                for column in GRIDSEARCH_RESULT_COLUMNS:
+                for column in GRIDSEARCH_SCORE_COLUMNS:
                     values = pd.to_numeric(report[column], errors="coerce").to_numpy()
                     if not np.isfinite(values).any():
                         raise ValueError(f"Kedro grid-search column {column} is invalid: {path}")
@@ -185,7 +191,7 @@ def _parameter_key(parameters: object) -> str:
 
 
 def _gridsearch_values(frame: pd.DataFrame) -> dict[str, np.ndarray]:
-    missing = {"params", *GRIDSEARCH_RESULT_COLUMNS}.difference(frame.columns)
+    missing = {"params", *GRIDSEARCH_SCORE_COLUMNS}.difference(frame.columns)
     if missing:
         raise ValueError(f"Grid-search results are missing columns: {sorted(missing)}")
 
@@ -196,10 +202,10 @@ def _gridsearch_values(frame: pd.DataFrame) -> dict[str, np.ndarray]:
             raise ValueError(f"Duplicate grid-search parameters: {key}")
         values[key] = np.asarray(
             [
-                abs(float(row["mean_test_rmse"])),
-                float(row["std_test_rmse"]),
-                float(row["mean_test_r_squared"]),
-                float(row["std_test_r_squared"]),
+                abs(float(row[column]))
+                if column.endswith("_rmse") and not column.startswith("std_")
+                else float(row[column])
+                for column in GRIDSEARCH_SCORE_COLUMNS
             ]
         )
     return values

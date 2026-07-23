@@ -36,4 +36,4 @@ models:
 evaluation:
   metrics: [rmse, r_squared]
   refit: rmse
-  workers: 5
+  workers: -1
