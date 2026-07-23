@@ -9,8 +9,6 @@ dependencies:
   - pip
   - conda-forge::setuptools=78.1.1
 
-  - nodejs=18.18.2
-
   - numpy=1.26.4
   - scipy=1.15.2
   - matplotlib=3.8.4
@@ -19,16 +17,11 @@ dependencies:
 
   - py-xgboost-cpu=2.1.4
 
-  - jupyterlab=4.0.11
-  - ipywidgets
-  - jupyterlab_widgets
-  - texlive-core
+  - anaconda::texlive-core=20240312
 
-  - pyts
   - h5py=3.14.0
   - joblib=1.3.2
 
-  - dask=2025.2.0
   - dvc=3.67.1
   - conda-forge::pycares=4.10.0
 
@@ -42,7 +35,6 @@ dependencies:
       - openpyxl
       - pre-commit
       - ruff
-      - SciencePlots~=2.1
       - humanize
       - tensorflow[and-cuda]~=2.16.1; platform_system == "Linux"
       - tensorflow~=2.16.1; platform_system != "Linux"
