@@ -16,7 +16,7 @@ STAGE_NAMES = {
 }
 IMPLEMENTATION_NAMES = {
     "localize": "LOCALIZE",
-    "jupyter": "Notebook",
+    "jupyter": "Jupyter",
     "kedro": "Kedro",
 }
 EXPECTED_USAGE_COUNTS = {
@@ -106,7 +106,7 @@ def load_report(path: Path, implementation: str):
         return report
 
     if implementation in {"jupyter", "kedro"}:
-        label = "Notebook" if implementation == "jupyter" else "Kedro"
+        label = "Jupyter" if implementation == "jupyter" else "Kedro"
         if isinstance(report, pd.DataFrame):
             required = {"params", *GRIDSEARCH_SCORE_COLUMNS}
             missing = required.difference(report.columns)

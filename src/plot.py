@@ -26,6 +26,7 @@ from evaluation_data import (
 ROOT = Path(__file__).resolve().parents[1]
 IMPLEMENTATIONS = tuple(IMPLEMENTATION_NAMES.values())
 SIZES = ("1x", "5x", "10x")
+SIZE_LABELS = {"1x": "1×", "5x": "5×", "10x": "10×"}
 STAGE_HATCHES = {
     "prepare": "\\",
     "featurize": "//",
@@ -237,7 +238,7 @@ def plot_benchmark_time(summary, figures: Path) -> None:
 def plot_loc(loc, figures: Path) -> None:
     implementations = (
         ("localize", "LOCALIZE", "green", "red", "--", "||"),
-        ("notebook", "Notebook", "lightgreen", "salmon", "//", "\\"),
+        ("notebook", "Jupyter", "lightgreen", "salmon", "//", "\\"),
         ("kedro", "Kedro", "cornflowerblue", "lightskyblue", "xx", ".."),
     )
     x = np.arange(len(loc))
@@ -313,7 +314,7 @@ def plot_scalability_memory(summary, figures: Path) -> None:
             ax.vlines(x, mean, maximum, linestyles=":", colors="black", linewidth=1)
             ax.scatter(x, maximum, marker="_", s=45, color="black", zorder=3)
 
-    ax.set_xticks(range(len(SIZES)), SIZES)
+    ax.set_xticks(range(len(SIZES)), [SIZE_LABELS[size] for size in SIZES])
     ax.set_ylabel("Memory usage [MB]")
     ax.set_axisbelow(True)
     ax.grid(axis="y", linestyle=":", linewidth=0.5)
@@ -364,7 +365,11 @@ def plot_scalability_time(summary, figures: Path) -> None:
         )
         ax.bar_label(cpu_bars, fmt="%.1f", fontsize=7, padding=2)
         ax.bar_label(wall_bars, fmt="%.1f", fontsize=7, padding=2)
-        ax.set_xticks(positions, SIZES, fontsize=8)
+        ax.set_xticks(
+            positions,
+            [SIZE_LABELS[size] for size in SIZES],
+            fontsize=8,
+        )
         ax.set_title(STAGE_NAMES[stage])
         ax.set_axisbelow(True)
         ax.grid(axis="y", linestyle=":", linewidth=0.5)

@@ -75,5 +75,4 @@ stages:
       - ${path.data}/prepared/${item.subset}.pkl
       - ${path.data}/splits/${item.subset}-${item.split}Split.pkl
     outs:
-      - ${path.models}/gridsearch-${item.subset}-${item.split}-${item.model}/${item.subset}-${item.model}-${item.split}Split-results.pkl
-
+      - ${path.models}/gridsearch-${item.subset}-${item.split}-${item.model}

@@ -203,7 +203,7 @@ def main() -> None:
     for row in rows:
         print(f"Change {row['change']}: {row['from']} -> {row['to']}")
         print(f"  LOCALIZE  +{row['localize_added']} -{row['localize_deleted']}")
-        print(f"  Notebook  +{row['notebook_added']} -{row['notebook_deleted']}")
+        print(f"  Jupyter   +{row['notebook_added']} -{row['notebook_deleted']}")
         print(f"  Kedro     +{row['kedro_added']} -{row['kedro_deleted']}")
 
 

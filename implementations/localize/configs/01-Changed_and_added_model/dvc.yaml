@@ -73,5 +73,4 @@ stages:
       - ${path.data}/prepared/umu.pkl
       - ${path.data}/splits/${item.split}Split.pkl
     outs:
-      - ${path.models}/gridsearch-${item.split}-${item.model}/${item.model}-${item.split}Split-results.pkl
-
+      - ${path.models}/gridsearch-${item.split}-${item.model}
