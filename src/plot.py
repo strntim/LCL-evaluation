@@ -57,6 +57,50 @@ def label_center(ax: plt.Axes, bars, fmt: str = "%.0f", fontsize: int = 8) -> No
     style_labels(labels)
 
 
+def format_time_label(value: float) -> str:
+    if 0 < abs(value) < 0.1:
+        return "<0.1"
+    return f"{value:.1f}"
+
+
+def label_time_bars(
+    ax: plt.Axes,
+    bars,
+    maxima,
+    stage_maximum: float,
+    horizontal_offset: float,
+    fontsize: int = 7,
+) -> None:
+    threshold = stage_maximum * 0.05
+    centered = [
+        format_time_label(bar.get_height()) if bar.get_height() >= threshold else ""
+        for bar in bars
+    ]
+    style_labels(
+        ax.bar_label(
+            bars,
+            labels=centered,
+            label_type="center",
+            fontsize=fontsize,
+        )
+    )
+
+    outside = [
+        ax.annotate(
+            format_time_label(bar.get_height()),
+            xy=(bar.get_x() + bar.get_width() / 2, maximum),
+            xytext=(horizontal_offset, 3),
+            textcoords="offset points",
+            ha="center",
+            va="bottom",
+            fontsize=fontsize,
+        )
+        for bar, maximum in zip(bars, maxima)
+        if bar.get_height() < threshold
+    ]
+    style_labels(outside)
+
+
 def label_loc(
     ax: plt.Axes,
     bars,
@@ -198,8 +242,8 @@ def plot_benchmark_time(summary, figures: Path) -> None:
             hatch="//",
             alpha=0.65,
         )
-        label_center(ax, cpu_bars, fmt="%.1f", fontsize=7)
-        label_center(ax, wall_bars, fmt="%.1f", fontsize=7)
+        core_maxima = rows.loc[list(IMPLEMENTATIONS), "core_max_seconds"].to_numpy()
+        wall_maxima = rows.loc[list(IMPLEMENTATIONS), "wall_max_seconds"].to_numpy()
         for index, implementation in enumerate(IMPLEMENTATIONS):
             row = rows.loc[implementation]
             add_distribution(
@@ -218,6 +262,9 @@ def plot_benchmark_time(summary, figures: Path) -> None:
                 row["wall_q3_seconds"],
                 row["wall_max_seconds"],
             )
+        stage_maximum = max(cpu.max(), wall.max())
+        label_time_bars(ax, cpu_bars, core_maxima, stage_maximum, -3)
+        label_time_bars(ax, wall_bars, wall_maxima, stage_maximum, 3)
         ax.set_xticks(positions, IMPLEMENTATIONS, fontsize=8)
         ax.set_title(STAGE_NAMES[stage])
         ax.set_axisbelow(True)
@@ -337,7 +384,7 @@ def plot_scalability_memory(summary, figures: Path) -> None:
 
 
 def plot_scalability_time(summary, figures: Path) -> None:
-    fig, axes = plt.subplots(2, 3, figsize=(8, 5.6), constrained_layout=True)
+    fig, axes = plt.subplots(2, 3, figsize=(9, 5.6), constrained_layout=True)
     axes = axes.flatten()
     bar_width = 0.36
 
@@ -363,8 +410,9 @@ def plot_scalability_time(summary, figures: Path) -> None:
             hatch="//",
             alpha=0.65,
         )
-        ax.bar_label(cpu_bars, fmt="%.1f", fontsize=7, padding=2)
-        ax.bar_label(wall_bars, fmt="%.1f", fontsize=7, padding=2)
+        stage_maximum = max(cpu.max(), wall.max())
+        label_time_bars(ax, cpu_bars, cpu, stage_maximum, -3)
+        label_time_bars(ax, wall_bars, wall, stage_maximum, 3)
         ax.set_xticks(
             positions,
             [SIZE_LABELS[size] for size in SIZES],
