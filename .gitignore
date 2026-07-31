@@ -283,6 +283,16 @@ $RECYCLE.BIN/
 lightning_logs/
 logs/
 tmp/
+/artifacts/
+/results/*
+!/results/.gitkeep
+implementations/localize/install/
+implementations/jupyter/results/
+implementations/kedro/artifacts/*
+!implementations/kedro/artifacts/.gitkeep
+implementations/kedro/logs/
+implementations/kedro/.viz/
+/datasets/*
 
 
 #/**/data/**
@@ -318,3 +328,10 @@ auto_model/
 #!**/*.dvc
 #!**/*.py
 #!**/dvc.lock
+
+!/datasets/umu/
+/datasets/umu/*
+!/datasets/umu/umu.zip
+!/datasets/logatec/
+/datasets/logatec/*
+!/datasets/logatec/logatec.zip

@@ -1,0 +1,63 @@
+prepared_data:
+  type: partitions.PartitionedDataset
+  path: ${globals:artifact_path}/data/prepared
+  dataset:
+    type: pickle.PickleDataset
+    backend: joblib
+  filename_suffix: .pkl
+  overwrite: true
+
+features:
+  type: partitions.PartitionedDataset
+  path: ${globals:artifact_path}/data/features
+  dataset:
+    type: pickle.PickleDataset
+    backend: joblib
+  filename_suffix: .pkl
+  overwrite: true
+
+targets:
+  type: partitions.PartitionedDataset
+  path: ${globals:artifact_path}/data/targets
+  dataset:
+    type: pickle.PickleDataset
+    backend: joblib
+  filename_suffix: .pkl
+  overwrite: true
+
+split_indices:
+  type: partitions.PartitionedDataset
+  path: ${globals:artifact_path}/data/splits
+  dataset:
+    type: pickle.PickleDataset
+    backend: joblib
+  filename_suffix: .pkl
+  overwrite: true
+
+gridsearch_models:
+  type: partitions.PartitionedDataset
+  path: ${globals:artifact_path}/models/gridsearch
+  dataset:
+    type: pickle.PickleDataset
+    backend: joblib
+  filename_suffix: .pkl
+  overwrite: true
+
+gridsearch_results:
+  type: partitions.PartitionedDataset
+  path: ${globals:artifact_path}/reports/results/gridsearch
+  dataset:
+    type: pickle.PickleDataset
+    backend: joblib
+  filename_suffix: .pkl
+  overwrite: true
+
+automl_results:
+  type: partitions.PartitionedDataset
+  path: ${globals:artifact_path}/reports/results/automl
+  dataset:
+    type: pickle.PickleDataset
+    backend: joblib
+  filename_suffix: .pkl
+  overwrite: true
+

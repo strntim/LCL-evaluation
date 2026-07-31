@@ -1,0 +1,21 @@
+dataset:
+  subsets: [umu]
+
+splitters:
+  KFold:
+    type: KFold
+    n_splits: 5
+    shuffle: true
+    random_state: 42
+
+models:
+  LinearRegression:
+    class: sklearn.linear_model.LinearRegression
+    parameters: {}
+    grid:
+      fit_intercept: [true, false]
+
+evaluation:
+  metrics: [rmse]
+  refit: rmse
+  workers: -1

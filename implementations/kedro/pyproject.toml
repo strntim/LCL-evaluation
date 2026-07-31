@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lcl-evaluation-kedro"
+version = "0.1.0"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "kedro==1.5.0",
+    "kedro-datasets==9.5.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = false
+
+[tool.kedro]
+package_name = "lcl_evaluation_kedro"
+project_name = "LCL Evaluation Kedro"
+kedro_init_version = "1.5.0"
+source_dir = "src"
+

@@ -1,0 +1,6 @@
+raw_data:
+  type: partitions.PartitionedDataset
+  path: datasets/logatec
+  dataset: json.JSONDataset
+  filename_suffix: _data.json
+
